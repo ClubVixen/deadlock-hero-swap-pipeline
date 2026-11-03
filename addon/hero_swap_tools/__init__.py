@@ -42,6 +42,8 @@ class HeroSwapSettings(bpy.types.PropertyGroup):
                                         description="Keep hair/tail/chest/butt chains as bones on the hero skeleton so they can get physics")
     jiggle_presets: StringProperty(name="Jiggle Presets", subtype="FILE_PATH", default=DEFAULT_JIGGLE,
                                    description="JSON with the bone patterns to keep and their ModelDoc jiggle settings")
+    eye_texture_dir: StringProperty(name="Eye Textures", subtype="DIR_PATH",
+                                    description="Where the baked eye PNGs go, e.g. <addon>/materials/models/heroes_wip/<hero>")
     export_collection: PointerProperty(name="Export Collection", type=bpy.types.Collection,
                                        description="Named after the hero mesh it replaces, e.g. unicorn_body")
     export_dir: StringProperty(name="Export Folder", subtype="DIR_PATH")
@@ -95,6 +97,25 @@ class HEROSWAP_OT_sync_shape_keys(bpy.types.Operator):
         driven = sum(d for d, _ in res.values())
         created = sum(c for _, c in res.values())
         self.report({"INFO"}, f"{len(res)} mesh(es): {created} keys created, {driven} keys linked to the body")
+        return {"FINISHED"}
+
+
+class HEROSWAP_OT_bake_eyes(bpy.types.Operator):
+    """Turn the selected meshes' projected Source eyes into UV-mapped textures that survive the fit and export. Run it before the fit"""
+    bl_idname = "heroswap.bake_eyes"
+    bl_label = "Convert Source Eyes to Textures"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        out = bpy.path.abspath(context.scene.hero_swap.eye_texture_dir)
+        if not out:
+            self.report({"ERROR"}, "Pick the Eye Textures folder first")
+            return {"CANCELLED"}
+        made = [m.name for o in selected_meshes(context) for m in core.bake_source_eyes(o, out)]
+        if not made:
+            self.report({"ERROR"}, "No SourceIO eyes (eye_N_* properties) on the selected meshes")
+            return {"CANCELLED"}
+        self.report({"INFO"}, f"Made {', '.join(made)}")
         return {"FINISHED"}
 
 
@@ -194,6 +215,8 @@ class HEROSWAP_PT_panel(bpy.types.Panel):
         row.prop(s, "create_missing")
         row.prop(s, "max_distance")
         col.operator(HEROSWAP_OT_sync_shape_keys.bl_idname, icon="SHAPEKEY_DATA")
+        col.prop(s, "eye_texture_dir")
+        col.operator(HEROSWAP_OT_bake_eyes.bl_idname, icon="HIDE_OFF")
         col.separator()
         col.label(text="2. Fit to hero")
         col.prop(s, "hero_rig")
@@ -210,7 +233,7 @@ class HEROSWAP_PT_panel(bpy.types.Panel):
         col.operator(HEROSWAP_OT_export.bl_idname, icon="EXPORT")
 
 
-classes = (HeroSwapSettings, HEROSWAP_OT_bonemerge, HEROSWAP_OT_apply_skin, HEROSWAP_OT_sync_shape_keys, HEROSWAP_OT_fit, HEROSWAP_OT_write_jiggle,
+classes = (HeroSwapSettings, HEROSWAP_OT_bonemerge, HEROSWAP_OT_apply_skin, HEROSWAP_OT_sync_shape_keys, HEROSWAP_OT_bake_eyes, HEROSWAP_OT_fit, HEROSWAP_OT_write_jiggle,
            HEROSWAP_OT_export, HEROSWAP_PT_panel)
 
 

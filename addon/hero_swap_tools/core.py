@@ -3,7 +3,7 @@ import fnmatch
 import json
 
 import bpy
-from mathutils import Matrix, Vector
+from mathutils import Matrix, Quaternion, Vector
 
 
 def rigid(m):
@@ -87,7 +87,88 @@ def apply_skin(objects, swaps):
     return n
 
 
-# --- hero fit ---------------------------------------------------------------------------------
+# --- eyes -------------------------------------------------------------------------------------
+
+def _eye_params(ob):
+    """{eyeball material name: (loc, rotation matrix, iris size, z offset)} from SourceIO's eye_N_* props."""
+    params = {}
+    i = 0
+    while f"eye_{i}_loc" in ob:
+        empty = bpy.data.objects.get(f"eye_{i}")
+        mat = empty.get("eye_material") if empty else None
+        if mat:
+            # the shader multiplies by the transposed (inverse) rotation of this w, x, y, z quaternion
+            rot = Quaternion(ob[f"eye_{i}_rot"]).to_matrix().transposed()
+            size = ob[f"eye_{i}_scale"][0] * ob[f"eye_{i}_iris_scale"]
+            params[mat.name] = (Vector(ob[f"eye_{i}_loc"]), rot, size, ob[f"eye_{i}_z_offset"])
+        i += 1
+    return params
+
+
+def _pixels(img):
+    import numpy as np
+    px = np.empty(len(img.pixels), dtype=np.float32)
+    img.pixels.foreach_get(px)
+    return px.reshape(img.size[1], img.size[0], 4)
+
+
+def bake_source_eyes(ob, out_dir, positions_from=None):
+    """Replace SourceIO's projected EyeRefract eyes with plain UV-mapped materials.
+
+    The iris is projected the way the eyeball shader does it, written into the eyeball faces'
+    UVs, and composited over the sclera into a PNG per eye. Source 2 has no EyeRefract, and the
+    projection breaks once the head is moved, so run this before the fit; positions_from can
+    instead name an unfitted copy of the same mesh to project from. Returns the new materials.
+    """
+    import os
+    import numpy as np
+    src = positions_from or ob
+    params = _eye_params(src)
+    if not params:
+        return []
+    me, uv = ob.data, ob.data.uv_layers.active.data
+    co = [src.matrix_world @ v.co for v in src.data.vertices]
+    made = []
+    for idx, slot in enumerate(ob.material_slots):
+        if not (slot.material and slot.material.name in params):
+            continue
+        mat = slot.material
+        loc, rot, size, z_off = params[mat.name]
+        spin = Matrix.Rotation(z_off, 3, "Z")
+        for poly in me.polygons:
+            if poly.material_index != idx:
+                continue
+            for li in poly.loop_indices:
+                v = rot @ ((co[me.loops[li].vertex_index] - loc) / size)
+                v = spin @ Vector((v.y, -v.x, v.z))
+                uv[li].uv = (min(max(v.y + 0.5, 0.001), 0.999), min(max(v.z + 0.5, 0.001), 0.999))
+        nodes = mat.node_tree.nodes
+        iris = nodes["$Iris"].image
+        base = nodes["$Basetexture"].image
+        sclera = _pixels(base)[..., :3].mean(axis=(0, 1)) if base else np.ones(3, dtype=np.float32)
+        px = _pixels(iris)
+        a = px[..., 3:4]
+        px[..., :3] = sclera + (px[..., :3] - sclera) * a
+        px[..., 3] = 1.0
+        name = f"{mat.name}_uv"
+        img = bpy.data.images.get(name) or bpy.data.images.new(name, iris.size[0], iris.size[1])
+        img.pixels.foreach_set(px.ravel())
+        os.makedirs(out_dir, exist_ok=True)
+        img.filepath_raw = os.path.join(out_dir, name + ".png")
+        img.file_format = "PNG"
+        img.save()
+        new = bpy.data.materials.get(name) or bpy.data.materials.new(name)
+        new.use_nodes = True
+        tex = new.node_tree.nodes.get("Image Texture") or new.node_tree.nodes.new("ShaderNodeTexImage")
+        tex.image = img
+        bsdf = new.node_tree.nodes["Principled BSDF"]
+        new.node_tree.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+        slot.material = new
+        made.append(new)
+    return made
+
+
+# --- hero fit---------------------------------------------------------------------------------
 
 def _pairs(src, dst):
     if not any(t in src + dst for t in ("{S}", "{Side}")):
