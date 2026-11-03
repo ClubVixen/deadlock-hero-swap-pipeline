@@ -51,6 +51,22 @@ Copy `config/example_hero_swap.json` and fill it in. Then:
    render mesh, rebuild bodygroups, materials, ragdoll and LODs, then link AnimGraph2 in CS2
    Workshop Tools and pack the VPK.
 
+## Blender add-on (GUI)
+
+`addon/hero_swap_tools` does the same steps with buttons. Copy the folder into
+`%APPDATA%\Blender Foundation\Blender\5.2\scripts\addons`, then turn on **Hero Swap Tools** in
+Preferences > Add-ons. The panel is in the 3D Viewport sidebar (press N) under **Hero Swap**:
+
+1. **Outfit.** Pick the Character Rig, select the outfit meshes, and click *Bone-merge Selected
+   onto Character*. Select the meshes again and click *Apply Skin Swaps* to change skins, using a
+   list of `old=new` material names.
+2. **Fit to hero.** Import the hero's body DMX with Source Tools, pick it as the Hero Skeleton,
+   and click *Fit Character to Hero*. This works on every mesh skinned to the Character Rig.
+3. **Export.** Pick the collection, which should be named after the hero mesh (e.g.
+   `unicorn_body`), choose a folder, and click *Export ModelDoc DMX*.
+
+Each button can be undone with Ctrl+Z.
+
 ## Bone maps
 
 `config/bonemap_va_anthro_to_deadlock.json` maps the ReVAmped/VA anthro rig onto the Deadlock
