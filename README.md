@@ -102,3 +102,14 @@ nearest mapped bone.
 The field names come from ModelDoc's JiggleBone node, and the starting values from the SFM
 `.qci` jiggle files. ModelDoc runs jiggle bones through cloth, so check them with Simulate in
 ModelDoc and adjust.
+
+## Compile and pack
+
+- The CSDK compiles materials and the model from the command line with
+  `game/bin/win64/resourcecompiler.exe -danger_mode_ignore_schema_mismatches -game <CSDK>/game/citadel -addon <addon> -i <file>`.
+  That's the same switch the CSDK's own "deadlock with Tools.bat" uses.
+- The CSDK is older than AnimGraph 2, so it can't read `NmSkeletonList` or `AnimGraph2List`. Compile the hero `.vmdl`
+  with CS2 Workshop Tools instead (`content/csgo_addons/<addon>`), using stub `.vmat` files for any missing materials.
+  Ship that `.vmdl_c` and its `_vmorf.vtex_c` together with the CSDK-compiled materials.
+- `python tools/pack_vpk.py <folder> pakNN_dir.vpk` packs the compiled files into a single-file addon VPK for
+  `game/citadel/addons`. A lower pak number loads first, so a lower-numbered mod for the same hero wins.
