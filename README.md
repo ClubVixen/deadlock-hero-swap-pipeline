@@ -32,6 +32,8 @@ come with a default modifier. In `io_scene_valvesource/flex.py`, `addDrivers`, c
   `Source2Viewer-CLI -i <Deadlock>/game/citadel/pak01_dir.vpk -f models/heroes_wip/<hero>/<hero>.vmdl_c -d -o work/hero_src`
   This writes the `.vmdl` plus one DMX per hero mesh. Then use File > Import > Source Engine
   (Source Tools) on `<hero>_<hero>_body.dmx` to bring in the hero skeleton.
+  Deselect everything first, or set Bone Append Mode to **Make New Armature**: with an armature
+  active, Source Tools merges the hero's bones into that armature instead of creating its own.
 - **Character and outfit:** use File > Import > Source Engine assets > `.mdl` (SourceIO) on the
   compiled models. Their sliders come in as shape keys. Delete any bodygroups you don't want.
 
