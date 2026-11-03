@@ -41,6 +41,63 @@ def deform_by_bones(ob, bone_matrix, world=False):
     me.update()
 
 
+def _split_rigid(M):
+    """Split an affine 4x4 into a rotation quaternion, translation and the leftover linear stretch
+    R(P - I) from the polar decomposition L = R P, so M v = R v + t + R(P - I) v."""
+    import numpy as np
+    L = np.array(M.to_3x3())
+    U, _, Vt = np.linalg.svd(L)
+    R = U @ Vt
+    if np.linalg.det(R) < 0:
+        U[:, -1] *= -1
+        R = U @ Vt
+    rest = L - R
+    return Matrix(R.tolist()).to_quaternion(), M.to_translation(), Matrix(rest.tolist())
+
+
+def deform_dq(ob, bone_matrix):
+    """Like deform_by_bones, but blends the rotations as dual quaternions so joints that turn a lot
+    (a T-pose shoulder going to an A-pose) keep their volume instead of bulging or caving in.
+    Stretch along bones is still blended linearly."""
+    me = ob.data
+    parts = {}
+    for g in ob.vertex_groups:
+        M = bone_matrix(g.name)
+        if M is not None:
+            parts[g.index] = _split_rigid(M)
+    per_vert = []
+    for v in me.vertices:
+        ws = [(parts[g.group], g.weight) for g in v.groups if g.group in parts and g.weight > 0]
+        tot = sum(w for _, w in ws)
+        if tot <= 0:
+            per_vert.append(Matrix.Identity(4))
+            continue
+        q0 = ws[0][0][0]
+        qr = Quaternion((0, 0, 0, 0))
+        qd = Quaternion((0, 0, 0, 0))
+        lin = Matrix(((0, 0, 0), (0, 0, 0), (0, 0, 0)))
+        for (q, tr, rest), w in ws:
+            w /= tot
+            if q.dot(q0) < 0:
+                q = -q
+            qr = qr + q * w
+            qd = qd + (Quaternion((0, tr.x, tr.y, tr.z)) @ q) * (0.5 * w)
+            lin = lin + rest * w
+        n = qr.magnitude
+        qr = qr * (1 / n)
+        qd = qd * (1 / n)
+        tq = (qd @ qr.conjugated()) * 2
+        M = (qr.to_matrix() + lin).to_4x4()
+        M.translation = Vector((tq.x, tq.y, tq.z))
+        per_vert.append(M)
+    for kb in (me.shape_keys.key_blocks if me.shape_keys else []):
+        for i, d in enumerate(kb.data):
+            d.co = per_vert[i] @ d.co
+    for i, v in enumerate(me.vertices):
+        v.co = per_vert[i] @ v.co
+    me.update()
+
+
 def reparent(ob, arm):
     ob.parent = None
     ob.matrix_basis = Matrix.Identity(4)
@@ -317,7 +374,7 @@ def fit_to_hero(src_arm, meshes, hero_arm, bonemap, side_bones=("LeftThigh", "Ri
     yaw = Vector((fwd.x, fwd.y)).angle_signed(Vector((1, 0)))
     feet = [v.z for n, v in h.items() if "Toe" in n or "Foot" in n] or [0.0]
     ground = min(feet)
-    src_head, hero_head, hero_floor = height_bones
+    src_head, hero_head, hero_floor = bonemap.get("height_bones", height_bones)
     scale = (hero[hero_head].z - hero[hero_floor].z) / (h[src_head].z - ground)
     place = Matrix.Translation(Vector((hero["pelvis"].x, hero["pelvis"].y, 0)))
     pelvis = h.get("Pelvis", Vector())
@@ -344,12 +401,18 @@ def fit_to_hero(src_arm, meshes, hero_arm, bonemap, side_bones=("LeftThigh", "Ri
         b, f = rest.split("@")
         return hero[a].lerp(hero[b], float(f)) if a in hero and b in hero else None
 
-    for s0p, s1p, d0p, d1p in bonemap["segments"]:
+    for seg in bonemap["segments"]:
+        s0p, s1p, d0p, d1p = seg[:4]
+        move_only = len(seg) > 4 and seg[4] == "move"
         for (s0, d0), (s1, d1) in zip(_pairs(s0p, d0p), _pairs(s1p, d1p)):
             j0, j1 = joint(d0), joint(d1)
             if s0 in h and s1 in h and j0 is not None and j1 is not None:
-                maps[s0] = segment_map(h[s0], h[s1], j0, j1)
-                rots[s0] = (h[s1] - h[s0]).rotation_difference(j1 - j0)
+                if move_only:  # torso: slide the joint onto the hero's, keep the character's own shape
+                    maps[s0] = Matrix.Translation(j0 - h[s0])
+                    rots[s0] = Quaternion()
+                else:
+                    maps[s0] = segment_map(h[s0], h[s1], j0, j1)
+                    rots[s0] = (h[s1] - h[s0]).rotation_difference(j1 - j0)
     bones = src_arm.data.bones
     for sp, dp in bonemap["terminals"]:
         for s, d in _pairs(sp, dp):
@@ -396,7 +459,7 @@ def fit_to_hero(src_arm, meshes, hero_arm, bonemap, side_bones=("LeftThigh", "Ri
         bpy.ops.object.mode_set(mode="OBJECT")
 
     for ob in meshes:
-        deform_by_bones(ob, bone_map)
+        deform_dq(ob, bone_map)
         retarget_weights(ob, target)
         reparent(ob, hero_arm)
     return yaw, scale
