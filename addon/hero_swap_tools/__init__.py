@@ -167,6 +167,22 @@ class HEROSWAP_OT_aim_tail(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class HEROSWAP_OT_flip_tail(bpy.types.Operator):
+    """Turn the Tail Root chain upside down, if it curls the wrong way after Point Tail Backward"""
+    bl_idname = "heroswap.flip_tail"
+    bl_label = "Flip Tail Upside Down"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        s = context.scene.hero_swap
+        if not (s.hero_rig and s.tail_root in s.hero_rig.data.bones):
+            self.report({"ERROR"}, "Pick the Hero Skeleton and a Tail Root bone that is on it")
+            return {"CANCELLED"}
+        n = core.flip_chain(s.hero_rig, s.tail_root)
+        self.report({"INFO"}, f"Flipped the tail ({n} vertices)")
+        return {"FINISHED"}
+
+
 class HEROSWAP_OT_write_jiggle(bpy.types.Operator):
     """Write ModelDoc JiggleBone settings for the kept bones into a text block and the clipboard"""
     bl_idname = "heroswap.write_jiggle"
@@ -245,6 +261,7 @@ class HEROSWAP_PT_panel(bpy.types.Panel):
         col.operator(HEROSWAP_OT_fit.bl_idname, icon="ARMATURE_DATA")
         col.prop(s, "tail_root")
         col.operator(HEROSWAP_OT_aim_tail.bl_idname, icon="FORWARD")
+        col.operator(HEROSWAP_OT_flip_tail.bl_idname, icon="ARROW_LEFTRIGHT")
         col.operator(HEROSWAP_OT_write_jiggle.bl_idname, icon="PHYSICS")
         col.separator()
         col.label(text="3. Export")
@@ -253,7 +270,7 @@ class HEROSWAP_PT_panel(bpy.types.Panel):
         col.operator(HEROSWAP_OT_export.bl_idname, icon="EXPORT")
 
 
-classes = (HeroSwapSettings, HEROSWAP_OT_bonemerge, HEROSWAP_OT_apply_skin, HEROSWAP_OT_sync_shape_keys, HEROSWAP_OT_bake_eyes, HEROSWAP_OT_fit, HEROSWAP_OT_aim_tail, HEROSWAP_OT_write_jiggle,
+classes = (HeroSwapSettings, HEROSWAP_OT_bonemerge, HEROSWAP_OT_apply_skin, HEROSWAP_OT_sync_shape_keys, HEROSWAP_OT_bake_eyes, HEROSWAP_OT_fit, HEROSWAP_OT_aim_tail, HEROSWAP_OT_flip_tail, HEROSWAP_OT_write_jiggle,
            HEROSWAP_OT_export, HEROSWAP_PT_panel)
 
 

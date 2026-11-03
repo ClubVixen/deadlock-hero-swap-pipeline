@@ -211,6 +211,20 @@ def aim_chain(arm, root_name, pivot_name="pelvis", direction=Vector((-1, 0, 0)))
     return math.degrees(angle), rotate_chain(arm, root_name, R)
 
 
+def flip_chain(arm, root_name):
+    """Turn a chain upside down (180 deg about the horizontal line from its root along its length),
+    for a tail that curls the wrong way after aim_chain."""
+    import math
+    root = arm.data.bones[root_name]
+    pivot = arm.matrix_world @ root.head_local
+    tip = max(root.children_recursive, key=lambda b: ((arm.matrix_world @ b.head_local) - pivot).length, default=root)
+    axis = (arm.matrix_world @ tip.head_local) - pivot
+    axis.z = 0
+    axis = axis.normalized() if axis.length > 1e-6 else Vector((1, 0, 0))
+    R = Matrix.Translation(pivot) @ Matrix.Rotation(math.pi, 4, axis) @ Matrix.Translation(-pivot)
+    return rotate_chain(arm, root_name, R)
+
+
 # --- hero fit ---------------------------------------------------------------------------------
 
 def _pairs(src, dst):
