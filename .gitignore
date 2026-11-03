@@ -1,0 +1,12 @@
+# personal configs point at local asset paths; only the example is shared
+config/*.json
+!config/example_hero_swap.json
+!config/bonemap_*.json
+*.blend
+*.blend1
+*.dmx
+*.vtf
+*.vmt
+*.mdl
+work/
+__pycache__/
