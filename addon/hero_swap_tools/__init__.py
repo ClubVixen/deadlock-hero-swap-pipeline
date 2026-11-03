@@ -44,6 +44,8 @@ class HeroSwapSettings(bpy.types.PropertyGroup):
                                    description="JSON with the bone patterns to keep and their ModelDoc jiggle settings")
     eye_texture_dir: StringProperty(name="Eye Textures", subtype="DIR_PATH",
                                     description="Where the baked eye PNGs go, e.g. <addon>/materials/models/heroes_wip/<hero>")
+    tail_root: StringProperty(name="Tail Root", default="TailBase",
+                              description="First bone of a chain that came out sideways after the fit")
     export_collection: PointerProperty(name="Export Collection", type=bpy.types.Collection,
                                        description="Named after the hero mesh it replaces, e.g. unicorn_body")
     export_dir: StringProperty(name="Export Folder", subtype="DIR_PATH")
@@ -149,6 +151,22 @@ class HEROSWAP_OT_fit(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class HEROSWAP_OT_aim_tail(bpy.types.Operator):
+    """Swing the Tail Root chain around the hero pelvis so it comes out of the back (run after the fit)"""
+    bl_idname = "heroswap.aim_tail"
+    bl_label = "Point Tail Backward"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        s = context.scene.hero_swap
+        if not (s.hero_rig and s.tail_root in s.hero_rig.data.bones):
+            self.report({"ERROR"}, "Pick the Hero Skeleton and a Tail Root bone that is on it")
+            return {"CANCELLED"}
+        deg, n = core.aim_chain(s.hero_rig, s.tail_root)
+        self.report({"INFO"}, f"Turned the tail {deg:.0f} deg ({n} vertices)")
+        return {"FINISHED"}
+
+
 class HEROSWAP_OT_write_jiggle(bpy.types.Operator):
     """Write ModelDoc JiggleBone settings for the kept bones into a text block and the clipboard"""
     bl_idname = "heroswap.write_jiggle"
@@ -225,6 +243,8 @@ class HEROSWAP_PT_panel(bpy.types.Panel):
         if s.keep_jiggle:
             col.prop(s, "jiggle_presets")
         col.operator(HEROSWAP_OT_fit.bl_idname, icon="ARMATURE_DATA")
+        col.prop(s, "tail_root")
+        col.operator(HEROSWAP_OT_aim_tail.bl_idname, icon="FORWARD")
         col.operator(HEROSWAP_OT_write_jiggle.bl_idname, icon="PHYSICS")
         col.separator()
         col.label(text="3. Export")
@@ -233,7 +253,7 @@ class HEROSWAP_PT_panel(bpy.types.Panel):
         col.operator(HEROSWAP_OT_export.bl_idname, icon="EXPORT")
 
 
-classes = (HeroSwapSettings, HEROSWAP_OT_bonemerge, HEROSWAP_OT_apply_skin, HEROSWAP_OT_sync_shape_keys, HEROSWAP_OT_bake_eyes, HEROSWAP_OT_fit, HEROSWAP_OT_write_jiggle,
+classes = (HeroSwapSettings, HEROSWAP_OT_bonemerge, HEROSWAP_OT_apply_skin, HEROSWAP_OT_sync_shape_keys, HEROSWAP_OT_bake_eyes, HEROSWAP_OT_fit, HEROSWAP_OT_aim_tail, HEROSWAP_OT_write_jiggle,
            HEROSWAP_OT_export, HEROSWAP_PT_panel)
 
 

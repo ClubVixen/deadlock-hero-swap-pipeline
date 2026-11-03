@@ -168,7 +168,50 @@ def bake_source_eyes(ob, out_dir, positions_from=None):
     return made
 
 
-# --- hero fit---------------------------------------------------------------------------------
+def rotate_chain(arm, root_name, R):
+    """Apply the world-space matrix R to a bone chain and the vertices weighted to it (blended by weight)."""
+    root = arm.data.bones[root_name]
+    chain = {root.name} | {b.name for b in root.children_recursive}
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.mode_set(mode="EDIT")
+    to_arm, to_world = arm.matrix_world.inverted(), arm.matrix_world
+    for eb in arm.data.edit_bones:
+        if eb.name in chain:
+            eb.head, eb.tail = to_arm @ (R @ (to_world @ eb.head)), to_arm @ (R @ (to_world @ eb.tail))
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    moved = 0
+    for ob in bpy.data.objects:
+        if ob.type != "MESH" or skinned_armature(ob) != arm:
+            continue
+        idx = {g.index for g in ob.vertex_groups if g.name in chain}
+        if not idx:
+            continue
+        mw, mwi = ob.matrix_world, ob.matrix_world.inverted()
+        w = [sum(g.weight for g in v.groups if g.group in idx) for v in ob.data.vertices]
+        layers = [kb.data for kb in ob.data.shape_keys.key_blocks] if ob.data.shape_keys else []
+        for data in [ob.data.vertices] + layers:
+            for i, d in enumerate(data):
+                if w[i] > 0:
+                    p = mw @ d.co
+                    d.co = mwi @ p.lerp(R @ p, min(w[i], 1.0))
+        ob.data.update()
+        moved += sum(1 for x in w if x > 0)
+    return moved
+
+
+def aim_chain(arm, root_name, pivot_name="pelvis", direction=Vector((-1, 0, 0))):
+    """Swing a bone chain that came out sideways (e.g. a tail) about world Z around the pivot bone,
+    so the chain's root sits in the given direction from it. Returns (degrees, vertices moved)."""
+    import math
+    pivot = arm.matrix_world @ arm.data.bones[pivot_name].head_local
+    cur = arm.matrix_world @ arm.data.bones[root_name].head_local - pivot
+    angle = math.atan2(direction.y, direction.x) - math.atan2(cur.y, cur.x)
+    R = Matrix.Translation(pivot) @ Matrix.Rotation(angle, 4, "Z") @ Matrix.Translation(-pivot)
+    return math.degrees(angle), rotate_chain(arm, root_name, R)
+
+
+# --- hero fit ---------------------------------------------------------------------------------
 
 def _pairs(src, dst):
     if not any(t in src + dst for t in ("{S}", "{Side}")):
@@ -188,6 +231,54 @@ def segment_map(a0, a1, b0, b1):
         for j in range(3):
             S[i][j] += (k - 1) * n[i] * n[j]
     return Matrix.Translation(b0) @ S @ R @ Matrix.Translation(-a0)
+
+
+def weight_target(src_arm, bonemap, hero_names):
+    """name -> hero bone for a source vertex group. Bones the map doesn't name (toes, hooves, face,
+    hair) go to their nearest named ancestor's hero bone, so they move with the limb they hang off.
+    The "*" rule is only the last resort."""
+    rules, fallback = [], "head"
+    for pat, dst in bonemap["groups"].items():
+        if pat == "*":
+            fallback = dst
+            continue
+        for p, d in _pairs(pat, dst):
+            if d in hero_names:
+                rules.append((p, d))
+    bones = src_arm.data.bones
+
+    def target(name):
+        b = bones.get(name)
+        while name:
+            d = next((d for p, d in rules if fnmatch.fnmatchcase(name, p)), None)
+            if d:
+                return d
+            b = b.parent if b else None
+            name = b.name if b else None
+        return fallback
+    return target
+
+
+def retarget_weights(ob, target, src=None):
+    """Rename ob's vertex groups to hero bones via target(name), merging and keeping the top 4 per vertex.
+    src (an unfitted copy with the same topology) supplies the original groups when ob's are already renamed."""
+    src = src or ob
+    old = {g.index: target(g.name) for g in src.vertex_groups}
+    weights = []
+    for v in src.data.vertices:
+        acc = {}
+        for g in v.groups:
+            if g.group in old and g.weight > 0:
+                acc[old[g.group]] = acc.get(old[g.group], 0) + g.weight
+        top = sorted(acc.items(), key=lambda kv: -kv[1])[:4]
+        tot = sum(w for _, w in top) or 1
+        weights.append([(b, w / tot) for b, w in top])
+    ob.vertex_groups.clear()
+    made = {}
+    for i, ws in enumerate(weights):
+        for b, w in ws:
+            g = made.get(b) or made.setdefault(b, ob.vertex_groups.new(name=b))
+            g.add([i], w, "REPLACE")
 
 
 def fit_to_hero(src_arm, meshes, hero_arm, bonemap, side_bones=("LeftThigh", "RightThigh"),
@@ -255,16 +346,7 @@ def fit_to_hero(src_arm, meshes, hero_arm, bonemap, side_bones=("LeftThigh", "Ri
             b = b.parent
         return maps[b.name] if b else Matrix.Identity(4)
 
-    rules = []
-    for pat, dst in bonemap["groups"].items():
-        for p, d in _pairs(pat, dst):
-            rules.append((p, d))
-
-    def mapped_target(name):
-        for p, d in rules:
-            if fnmatch.fnmatchcase(name, p) and d in hero:
-                return d
-        return "head"
+    mapped_target = weight_target(src_arm, bonemap, hero)
 
     kept = [b for b in bones if any(fnmatch.fnmatchcase(b.name, p) for p in keep_patterns)]
     kept_names = {b.name for b in kept}
@@ -295,22 +377,7 @@ def fit_to_hero(src_arm, meshes, hero_arm, bonemap, side_bones=("LeftThigh", "Ri
 
     for ob in meshes:
         deform_by_bones(ob, bone_map)
-        old = {g.index: target(g.name) for g in ob.vertex_groups}
-        weights = []
-        for v in ob.data.vertices:
-            acc = {}
-            for g in v.groups:
-                if g.group in old and g.weight > 0:
-                    acc[old[g.group]] = acc.get(old[g.group], 0) + g.weight
-            top = sorted(acc.items(), key=lambda kv: -kv[1])[:4]
-            tot = sum(w for _, w in top) or 1
-            weights.append([(b, w / tot) for b, w in top])
-        ob.vertex_groups.clear()
-        made = {}
-        for i, ws in enumerate(weights):
-            for b, w in ws:
-                g = made.get(b) or made.setdefault(b, ob.vertex_groups.new(name=b))
-                g.add([i], w, "REPLACE")
+        retarget_weights(ob, target)
         reparent(ob, hero_arm)
     return yaw, scale
 
