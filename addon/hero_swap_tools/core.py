@@ -211,21 +211,17 @@ def aim_chain(arm, root_name, pivot_name="pelvis", direction=Vector((-1, 0, 0)))
     return math.degrees(angle), rotate_chain(arm, root_name, R)
 
 
-def flip_chain(arm, root_name):
-    """Turn a chain upside down (180 deg about the horizontal line from its root along its length),
-    for a tail that curls the wrong way after aim_chain."""
+def flip_chain(arm, root_name, pivot_name="pelvis"):
+    """Turn a chain upside down: 180 deg about the horizontal line from the pivot bone through the
+    chain's root, for a tail that curls the wrong way after aim_chain."""
     import math
-    root = arm.data.bones[root_name]
-    pivot = arm.matrix_world @ root.head_local
-    tip = max(root.children_recursive, key=lambda b: ((arm.matrix_world @ b.head_local) - pivot).length, default=root)
-    axis = (arm.matrix_world @ tip.head_local) - pivot
+    pivot = arm.matrix_world @ arm.data.bones[root_name].head_local
+    axis = pivot - arm.matrix_world @ arm.data.bones[pivot_name].head_local
     axis.z = 0
-    axis = axis.normalized() if axis.length > 1e-6 else Vector((1, 0, 0))
+    axis = axis.normalized() if axis.length > 1e-6 else Vector((-1, 0, 0))
     R = Matrix.Translation(pivot) @ Matrix.Rotation(math.pi, 4, axis) @ Matrix.Translation(-pivot)
     return rotate_chain(arm, root_name, R)
 
-
-# --- hero fit ---------------------------------------------------------------------------------
 
 def _pairs(src, dst):
     if not any(t in src + dst for t in ("{S}", "{Side}")):
@@ -339,11 +335,21 @@ def fit_to_hero(src_arm, meshes, hero_arm, bonemap, side_bones=("LeftThigh", "Ri
     h = {n: T @ p for n, p in h.items()}
 
     maps, rots = {}, {}
+    def joint(name):
+        """A hero joint, or "a..b@t": the point t of the way from joint a to joint b, for when the
+        source has more joints than the hero along the same stretch (e.g. five spine bones vs four)."""
+        if ".." not in name:
+            return hero.get(name)
+        a, rest = name.split("..")
+        b, f = rest.split("@")
+        return hero[a].lerp(hero[b], float(f)) if a in hero and b in hero else None
+
     for s0p, s1p, d0p, d1p in bonemap["segments"]:
         for (s0, d0), (s1, d1) in zip(_pairs(s0p, d0p), _pairs(s1p, d1p)):
-            if s0 in h and s1 in h and d0 in hero and d1 in hero:
-                maps[s0] = segment_map(h[s0], h[s1], hero[d0], hero[d1])
-                rots[s0] = (h[s1] - h[s0]).rotation_difference(hero[d1] - hero[d0])
+            j0, j1 = joint(d0), joint(d1)
+            if s0 in h and s1 in h and j0 is not None and j1 is not None:
+                maps[s0] = segment_map(h[s0], h[s1], j0, j1)
+                rots[s0] = (h[s1] - h[s0]).rotation_difference(j1 - j0)
     bones = src_arm.data.bones
     for sp, dp in bonemap["terminals"]:
         for s, d in _pairs(sp, dp):
