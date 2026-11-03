@@ -17,6 +17,7 @@ bl_info = {
 }
 
 DEFAULT_BONEMAP = os.path.join(os.path.dirname(__file__), "bonemap_va_anthro_to_deadlock.json")
+DEFAULT_JIGGLE = os.path.join(os.path.dirname(__file__), "jiggle_presets.json")
 
 
 def is_armature(_self, ob):
@@ -37,6 +38,10 @@ class HeroSwapSettings(bpy.types.PropertyGroup):
                                            description="Copy body shape keys the outfit lacks, from the nearest body surface")
     max_distance: bpy.props.FloatProperty(name="Max Distance", default=0.0, min=0.0,
                                           description="Ignore outfit vertices farther than this from the body (0 = no limit)")
+    keep_jiggle: bpy.props.BoolProperty(name="Keep Jiggle Bones", default=True,
+                                        description="Keep hair/tail/chest/butt chains as bones on the hero skeleton so they can get physics")
+    jiggle_presets: StringProperty(name="Jiggle Presets", subtype="FILE_PATH", default=DEFAULT_JIGGLE,
+                                   description="JSON with the bone patterns to keep and their ModelDoc jiggle settings")
     export_collection: PointerProperty(name="Export Collection", type=bpy.types.Collection,
                                        description="Named after the hero mesh it replaces, e.g. unicorn_body")
     export_dir: StringProperty(name="Export Folder", subtype="DIR_PATH")
@@ -108,13 +113,37 @@ class HEROSWAP_OT_fit(bpy.types.Operator):
         if not meshes:
             self.report({"ERROR"}, "No meshes are skinned to the Character Rig")
             return {"CANCELLED"}
+        keep = core.load_bonemap(s.jiggle_presets).get("keep_patterns", []) if s.keep_jiggle else []
+        before = {b.name for b in s.hero_rig.data.bones}
         try:
-            yaw, scale = core.fit_to_hero(s.character_rig, meshes, s.hero_rig, core.load_bonemap(s.bonemap))
+            yaw, scale = core.fit_to_hero(s.character_rig, meshes, s.hero_rig, core.load_bonemap(s.bonemap),
+                                          keep_patterns=keep)
         except KeyError as e:
             self.report({"ERROR"}, f"Bone not found: {e}. Check the bone map matches both rigs")
             return {"CANCELLED"}
+        added = [b.name for b in s.hero_rig.data.bones if b.name not in before]
+        s.hero_rig["hero_swap_jiggle_bones"] = added
         s.character_rig.hide_set(True)
-        self.report({"INFO"}, f"Fitted {len(meshes)} meshes (turned {yaw * 57.2958:.0f} deg, scaled x{scale:.2f})")
+        self.report({"INFO"}, f"Fitted {len(meshes)} meshes (turned {yaw * 57.2958:.0f} deg, scaled x{scale:.2f}), kept {len(added)} jiggle bones")
+        return {"FINISHED"}
+
+
+class HEROSWAP_OT_write_jiggle(bpy.types.Operator):
+    """Write ModelDoc JiggleBone settings for the kept bones into a text block and the clipboard"""
+    bl_idname = "heroswap.write_jiggle"
+    bl_label = "Write Jiggle Bones for ModelDoc"
+
+    def execute(self, context):
+        s = context.scene.hero_swap
+        names = list(s.hero_rig.get("hero_swap_jiggle_bones", [])) if s.hero_rig else []
+        if not names:
+            self.report({"ERROR"}, "No kept jiggle bones yet: run Fit Character to Hero with Keep Jiggle Bones on")
+            return {"CANCELLED"}
+        text, n = core.jiggle_vmdl_block(names, core.load_bonemap(s.jiggle_presets)["presets"])
+        block = bpy.data.texts.get("jiggle_bones.vmdl") or bpy.data.texts.new("jiggle_bones.vmdl")
+        block.from_string(text)
+        context.window_manager.clipboard = text
+        self.report({"INFO"}, f"{n} jiggle bones written to the 'jiggle_bones.vmdl' text and the clipboard")
         return {"FINISHED"}
 
 
@@ -169,7 +198,11 @@ class HEROSWAP_PT_panel(bpy.types.Panel):
         col.label(text="2. Fit to hero")
         col.prop(s, "hero_rig")
         col.prop(s, "bonemap")
+        col.prop(s, "keep_jiggle")
+        if s.keep_jiggle:
+            col.prop(s, "jiggle_presets")
         col.operator(HEROSWAP_OT_fit.bl_idname, icon="ARMATURE_DATA")
+        col.operator(HEROSWAP_OT_write_jiggle.bl_idname, icon="PHYSICS")
         col.separator()
         col.label(text="3. Export")
         col.prop(s, "export_collection")
@@ -177,7 +210,7 @@ class HEROSWAP_PT_panel(bpy.types.Panel):
         col.operator(HEROSWAP_OT_export.bl_idname, icon="EXPORT")
 
 
-classes = (HeroSwapSettings, HEROSWAP_OT_bonemerge, HEROSWAP_OT_apply_skin, HEROSWAP_OT_sync_shape_keys, HEROSWAP_OT_fit,
+classes = (HeroSwapSettings, HEROSWAP_OT_bonemerge, HEROSWAP_OT_apply_skin, HEROSWAP_OT_sync_shape_keys, HEROSWAP_OT_fit, HEROSWAP_OT_write_jiggle,
            HEROSWAP_OT_export, HEROSWAP_PT_panel)
 
 

@@ -110,12 +110,14 @@ def segment_map(a0, a1, b0, b1):
 
 
 def fit_to_hero(src_arm, meshes, hero_arm, bonemap, side_bones=("LeftThigh", "RightThigh"),
-                height_bones=("Head", "head", "ball_L")):
+                height_bones=("Head", "head", "ball_L"), keep_patterns=()):
     """Fit meshes skinned to src_arm onto hero_arm without touching the hero's bones.
 
     Turns the character to face +X, scales it to the hero's height, moves each mapped bone
     segment onto the matching hero segment (T-pose into the hero bind pose, joints lined up),
     then renames vertex groups to hero bones, limits to 4 weights and re-parents.
+    Source bones matching keep_patterns (hair/tail/chest chains) are added to the hero
+    skeleton as new bones instead of being merged, so they can be made jiggle bones.
     """
     hero = {b.name: hero_arm.matrix_world @ b.head_local for b in hero_arm.data.bones}
 
@@ -177,11 +179,38 @@ def fit_to_hero(src_arm, meshes, hero_arm, bonemap, side_bones=("LeftThigh", "Ri
         for p, d in _pairs(pat, dst):
             rules.append((p, d))
 
-    def target(name):
+    def mapped_target(name):
         for p, d in rules:
             if fnmatch.fnmatchcase(name, p) and d in hero:
                 return d
         return "head"
+
+    kept = [b for b in bones if any(fnmatch.fnmatchcase(b.name, p) for p in keep_patterns)]
+    kept_names = {b.name for b in kept}
+
+    def target(name):
+        return name if name in kept_names else mapped_target(name)
+
+    # kept bones (jiggle chains) are added to the hero skeleton, carried by the same map as their vertices
+    if kept:
+        bpy.context.view_layer.objects.active = hero_arm
+        bpy.ops.object.mode_set(mode="EDIT")
+        to_arm = hero_arm.matrix_world.inverted()
+        ebs = hero_arm.data.edit_bones
+        for b in kept:  # bones are listed parents first
+            M = bone_map(b.name)
+            head = to_arm @ (M @ (T @ (src_arm.matrix_world @ b.head_local)))
+            tail = to_arm @ (M @ (T @ (src_arm.matrix_world @ b.tail_local)))
+            kids = [c for c in b.children if c.name in kept_names]
+            if kids:  # point the bone at its first kept child, so jiggle chains have real lengths
+                tail = to_arm @ (bone_map(kids[0].name) @ (T @ (src_arm.matrix_world @ kids[0].head_local)))
+            if (tail - head).length < 1e-3:
+                tail = head + Vector((0, 0, 1))
+            eb = ebs.get(b.name) or ebs.new(b.name)
+            eb.head, eb.tail = head, tail
+            parent = b.parent.name if b.parent else None
+            eb.parent = ebs.get(parent if parent in kept_names else mapped_target(parent or ""))
+        bpy.ops.object.mode_set(mode="OBJECT")
 
     for ob in meshes:
         deform_by_bones(ob, bone_map)
@@ -290,6 +319,23 @@ def sync_shape_keys(body, meshes, create_missing=True, max_distance=0.0):
         ob.data.update()
         result[ob.name] = (driven, created)
     return result
+
+
+def jiggle_vmdl_block(bone_names, presets):
+    """ModelDoc JiggleBoneList text for the given bones, one JiggleBone per bone."""
+    lines = ["{", '\t_class = "JiggleBoneList"', "\tchildren = ", "\t["]
+    count = 0
+    for name in bone_names:
+        preset = next((p for p in presets if fnmatch.fnmatchcase(name, p["pattern"])), None)
+        if preset is None or preset.get("skip"):
+            continue
+        lines += ["\t\t{", '\t\t\t_class = "JiggleBone"', f'\t\t\tname = "jiggle_{name}"', f'\t\t\tjiggle_root_bone = "{name}"']
+        for k, v in preset["fields"].items():
+            lines.append(f"\t\t\t{k} = {v}")
+        lines.append("\t\t},")
+        count += 1
+    lines += ["\t]", "}"]
+    return "\n".join(lines), count
 
 
 def load_bonemap(path):

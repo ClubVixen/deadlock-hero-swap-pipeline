@@ -48,6 +48,8 @@ Press **N** in the 3D Viewport and open the **Hero Swap** tab. Every button can 
 | 2. Fit to hero | **Hero Skeleton** | The skeleton imported from the hero's body DMX. |
 | | **Bone Map** | A JSON file mapping the character rig to the hero skeleton. It defaults to the VA anthro map that ships with the add-on. |
 | | **Fit Character to Hero** | Turns the character to face +X, scales it to the hero's height, and poses each mapped bone segment onto the hero's (T-pose to the hero bind pose, joints lined up). Shape keys and drivers are kept. Then it renames the weights to hero bones, limits them to 4 per vertex, and parents everything to the hero skeleton. The hero's bones are never changed. |
+| | **Keep Jiggle Bones** + **Jiggle Presets** | When this is on, the fit keeps chains that match `keep_patterns` in the presets file as real bones on the hero skeleton (hair, tail, chest, butt by default), instead of merging them into the head or pelvis. They hang off the nearest mapped hero bone and keep their weights. |
+| | **Write Jiggle Bones for ModelDoc** | Writes a ModelDoc `JiggleBoneList` for the kept bones. Each bone gets the first preset whose pattern matches: flexible for hair and tail, base spring for chest and butt. The result goes into the `jiggle_bones.vmdl` text block and the clipboard, ready to paste into the model's `.vmdl` next to the other lists. Tune the values in ModelDoc. |
 | 3. Export | **Export Collection** + **Export Folder** | Name the collection after the hero mesh it replaces, e.g. `unicorn_body`, and export to `<CSDK>/content/citadel_addons/<addon>/models/heroes_wip/<hero>/dmx`. |
 | | **Export ModelDoc DMX** | Writes a Binary 9 / Model 22 (ModelDoc) DMX with Source Tools. Shape keys become flexes, and `_cloth` bones are removed. |
 
@@ -85,4 +87,15 @@ skeleton. For another source rig, write a new map:
 - `terminals` are end bones that only move and turn.
 - `groups` renames vertex groups, with `fnmatch` patterns. `{Side}` and `{S}` expand to Left/L and Right/R.
 
-Parts that aren't mapped, such as the tail and wings, stay rigid on the nearest mapped bone.
+Parts that aren't mapped and aren't kept as jiggle bones, such as the wings, stay rigid on the
+nearest mapped bone.
+
+## Physics presets
+
+`addon/hero_swap_tools/jiggle_presets.json` has two parts:
+- `keep_patterns` lists which source bones survive the fit.
+- `presets` holds the ModelDoc JiggleBone fields for each pattern. `"skip": true` keeps a bone without giving it jiggle, which is useful for a chain root such as `TailBase`.
+
+The field names come from ModelDoc's JiggleBone node, and the starting values from the SFM
+`.qci` jiggle files. ModelDoc runs jiggle bones through cloth, so check them with Simulate in
+ModelDoc and adjust.
