@@ -31,6 +31,12 @@ class HeroSwapSettings(bpy.types.PropertyGroup):
     bonemap: StringProperty(name="Bone Map", subtype="FILE_PATH", default=DEFAULT_BONEMAP)
     skin_swaps: StringProperty(name="Skin Swaps", default="nmm_outfit_sleeves=nmm_outfit_sleeves_textured",
                                description="Comma-separated old=new material names")
+    body_mesh: PointerProperty(name="Body Mesh", type=bpy.types.Object, poll=lambda _s, o: o.type == "MESH",
+                               description="The mesh whose shape keys (bust, hips, ...) the outfit should follow")
+    create_missing: bpy.props.BoolProperty(name="Create Missing Keys", default=True,
+                                           description="Copy body shape keys the outfit lacks, from the nearest body surface")
+    max_distance: bpy.props.FloatProperty(name="Max Distance", default=0.0, min=0.0,
+                                          description="Ignore outfit vertices farther than this from the body (0 = no limit)")
     export_collection: PointerProperty(name="Export Collection", type=bpy.types.Collection,
                                        description="Named after the hero mesh it replaces, e.g. unicorn_body")
     export_dir: StringProperty(name="Export Folder", subtype="DIR_PATH")
@@ -66,6 +72,24 @@ class HEROSWAP_OT_apply_skin(bpy.types.Operator):
         pairs = [p.split("=", 1) for p in context.scene.hero_swap.skin_swaps.split(",") if "=" in p]
         n = core.apply_skin(selected_meshes(context), {a.strip(): b.strip() for a, b in pairs})
         self.report({"INFO"}, f"Swapped {n} material slot(s)")
+        return {"FINISHED"}
+
+
+class HEROSWAP_OT_sync_shape_keys(bpy.types.Operator):
+    """Drive the selected meshes' shape keys from the Body Mesh's keys of the same name, creating missing ones"""
+    bl_idname = "heroswap.sync_shape_keys"
+    bl_label = "Match Outfit to Body Shape Keys"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        s = context.scene.hero_swap
+        if not s.body_mesh or not s.body_mesh.data.shape_keys:
+            self.report({"ERROR"}, "Pick a Body Mesh that has shape keys")
+            return {"CANCELLED"}
+        res = core.sync_shape_keys(s.body_mesh, selected_meshes(context), s.create_missing, s.max_distance)
+        driven = sum(d for d, _ in res.values())
+        created = sum(c for _, c in res.values())
+        self.report({"INFO"}, f"{len(res)} mesh(es): {created} keys created, {driven} keys linked to the body")
         return {"FINISHED"}
 
 
@@ -136,6 +160,11 @@ class HEROSWAP_PT_panel(bpy.types.Panel):
         col.operator(HEROSWAP_OT_bonemerge.bl_idname, icon="MOD_ARMATURE")
         col.prop(s, "skin_swaps")
         col.operator(HEROSWAP_OT_apply_skin.bl_idname, icon="MATERIAL")
+        col.prop(s, "body_mesh")
+        row = col.row()
+        row.prop(s, "create_missing")
+        row.prop(s, "max_distance")
+        col.operator(HEROSWAP_OT_sync_shape_keys.bl_idname, icon="SHAPEKEY_DATA")
         col.separator()
         col.label(text="2. Fit to hero")
         col.prop(s, "hero_rig")
@@ -148,7 +177,7 @@ class HEROSWAP_PT_panel(bpy.types.Panel):
         col.operator(HEROSWAP_OT_export.bl_idname, icon="EXPORT")
 
 
-classes = (HeroSwapSettings, HEROSWAP_OT_bonemerge, HEROSWAP_OT_apply_skin, HEROSWAP_OT_fit,
+classes = (HeroSwapSettings, HEROSWAP_OT_bonemerge, HEROSWAP_OT_apply_skin, HEROSWAP_OT_sync_shape_keys, HEROSWAP_OT_fit,
            HEROSWAP_OT_export, HEROSWAP_PT_panel)
 
 

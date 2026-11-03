@@ -205,6 +205,93 @@ def fit_to_hero(src_arm, meshes, hero_arm, bonemap, side_bones=("LeftThigh", "Ri
     return yaw, scale
 
 
+def _key_coords(ob, kb):
+    import numpy as np
+    co = np.empty(len(ob.data.vertices) * 3, dtype=np.float64)
+    kb.data.foreach_get("co", co)
+    return co.reshape(-1, 3)
+
+
+def sync_shape_keys(body, meshes, create_missing=True, max_distance=0.0):
+    """Make meshes (e.g. outfit pieces) follow the body's shape keys.
+
+    Keys the mesh already has with a body key's name are driven by that body key. With
+    create_missing, body keys the mesh lacks are made by carrying the body's deltas from the
+    nearest point on the body surface (interpolated across the triangle), then driven too.
+    max_distance > 0 skips vertices farther than that from the body. Returns {mesh: (driven, created)}.
+    """
+    import numpy as np
+    from mathutils.bvhtree import BVHTree
+    from mathutils.geometry import barycentric_transform
+
+    keys = body.data.shape_keys
+    if not keys or len(keys.key_blocks) < 2:
+        return {}
+    basis_kb = keys.reference_key
+    bw = body.matrix_world
+    body_basis = _key_coords(body, basis_kb)
+    body_world = [bw @ Vector(c) for c in body_basis]
+    me = body.data
+    me.calc_loop_triangles()
+    tris = [tuple(t.vertices) for t in me.loop_triangles]
+    tree = BVHTree.FromPolygons(body_world, tris)
+    body_deltas = {kb.name: _key_coords(body, kb) - body_basis for kb in keys.key_blocks if kb != basis_kb}
+    bw3 = bw.to_3x3()
+
+    result = {}
+    for ob in meshes:
+        if ob == body:
+            continue
+        if not ob.data.shape_keys:
+            ob.shape_key_add(name="Basis", from_mix=False)
+        okeys = ob.data.shape_keys
+        created = 0
+        missing = [n for n in body_deltas if n not in okeys.key_blocks] if create_missing else []
+        if missing:
+            ow = ob.matrix_world
+            to_local = ow.to_3x3().inverted() @ bw3
+            basis = _key_coords(ob, okeys.reference_key)
+            idx = np.zeros((len(basis), 3), dtype=np.int64)
+            wts = np.zeros((len(basis), 3))
+            for i, c in enumerate(basis):
+                p = ow @ Vector(c)
+                loc, _n, ti, dist = tree.find_nearest(p)
+                if ti is None or (max_distance > 0 and dist > max_distance):
+                    continue
+                a, b, cc = tris[ti]
+                bc = barycentric_transform(loc, body_world[a], body_world[b], body_world[cc],
+                                           Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1)))
+                idx[i] = (a, b, cc)
+                wts[i] = (bc.x, bc.y, bc.z)
+            M = np.array(to_local)
+            for name in missing:
+                d = body_deltas[name]
+                delta = (d[idx] * wts[..., None]).sum(axis=1) @ M.T
+                if not np.any(np.abs(delta) > 1e-7):
+                    continue
+                kb = ob.shape_key_add(name=name, from_mix=False)
+                kb.data.foreach_set("co", (basis + delta).ravel())
+                created += 1
+        driven = 0
+        for kb in okeys.key_blocks:
+            if kb == okeys.reference_key or kb.name not in body_deltas:
+                continue
+            kb.driver_remove("value")
+            fc = kb.driver_add("value")
+            fc.driver.type = "AVERAGE"
+            var = fc.driver.variables.new()
+            var.name = "body"
+            var.targets[0].id_type = "KEY"
+            var.targets[0].id = keys
+            var.targets[0].data_path = f'key_blocks["{kb.name}"].value'
+            kb.slider_max = keys.key_blocks[kb.name].slider_max
+            kb.slider_min = keys.key_blocks[kb.name].slider_min
+            driven += 1
+        ob.data.update()
+        result[ob.name] = (driven, created)
+    return result
+
+
 def load_bonemap(path):
     with open(bpy.path.abspath(path)) as f:
         return json.load(f)
