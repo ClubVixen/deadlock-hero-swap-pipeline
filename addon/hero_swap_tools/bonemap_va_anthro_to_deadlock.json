@@ -1,5 +1,5 @@
 {
-  "_comment": "VA/ReVAmped anthro rig -> Deadlock hero skeleton. 'segments' drive the fit: the source joint pair is mapped onto the target joint pair (rotate + stretch). 'groups' rename vertex groups; a group follows the segment named in 'follow' (default: its own source bone, else the nearest mapped ancestor). {S} expands to L/R, {Side} to Left/Right. A target can be 'a..b@t', the point t of the way from hero joint a to b. Neck, hand twist, palm, eyes and jaw are not segments: they ride along with their parent's map, because stretching their short segments onto the hero's warped the neck, wrists, palms and muzzle. A fifth entry \"move\" only slides the source joint onto the hero joint (no turn or stretch), used for the spine and clavicles so the torso keeps its own shape. 'height_bones' (source joint, hero joint, hero floor) sets the overall scale: matching shoulder height rather than head height keeps a long-bodied, big-headed character from having its torso squashed, while the neck and head ride along with the top of the spine at their own size.",
+  "_comment": "VA/ReVAmped anthro rig -> Deadlock hero skeleton. 'segments' drive the fit: the source joint pair is mapped onto the target joint pair (rotate + stretch). 'groups' rename vertex groups; a group follows the segment named in 'follow' (default: its own source bone, else the nearest mapped ancestor). {S} expands to L/R, {Side} to Left/Right. A target can be 'a..b@t', the point t of the way from hero joint a to b. Neck, hand twist, palm, eyes and jaw are not segments: they ride along with their parent's map, because stretching their short segments onto the hero's warped the neck, wrists, palms and muzzle. A fifth entry \"move\" only slides the source joint onto the hero joint (no turn or stretch), used for the spine and clavicles so the torso keeps its own shape. 'height_bones' (source joint, hero joint, hero floor) sets the overall scale: matching shoulder height rather than head height keeps a long-bodied, big-headed character from having its torso squashed, while the neck and head ride along with the top of the spine at their own size. Fingers ride along with the hand at their own size (stretching them onto the hero's longer, curled fingers crossed them). 'torso' lists the map keys whose vertices get their fit displacement smoothed, so the back and chest keep their surface shape.",
   "segments": [
     [
       "Spine1",
@@ -62,66 +62,6 @@
       "finger_middle_0_{S}"
     ],
     [
-      "{Side}Finger11",
-      "{Side}Finger12",
-      "finger_thumb_0_{S}",
-      "finger_thumb_1_{S}"
-    ],
-    [
-      "{Side}Finger12",
-      "{Side}Finger13",
-      "finger_thumb_1_{S}",
-      "finger_thumb_2_{S}"
-    ],
-    [
-      "{Side}Finger21",
-      "{Side}Finger22",
-      "finger_index_0_{S}",
-      "finger_index_1_{S}"
-    ],
-    [
-      "{Side}Finger22",
-      "{Side}Finger23",
-      "finger_index_1_{S}",
-      "finger_index_2_{S}"
-    ],
-    [
-      "{Side}Finger31",
-      "{Side}Finger32",
-      "finger_middle_0_{S}",
-      "finger_middle_1_{S}"
-    ],
-    [
-      "{Side}Finger32",
-      "{Side}Finger33",
-      "finger_middle_1_{S}",
-      "finger_middle_2_{S}"
-    ],
-    [
-      "{Side}Finger41",
-      "{Side}Finger42",
-      "finger_ring_0_{S}",
-      "finger_ring_1_{S}"
-    ],
-    [
-      "{Side}Finger42",
-      "{Side}Finger43",
-      "finger_ring_1_{S}",
-      "finger_ring_2_{S}"
-    ],
-    [
-      "{Side}Finger51",
-      "{Side}Finger52",
-      "finger_pinky_0_{S}",
-      "finger_pinky_1_{S}"
-    ],
-    [
-      "{Side}Finger52",
-      "{Side}Finger53",
-      "finger_pinky_1_{S}",
-      "finger_pinky_2_{S}"
-    ],
-    [
       "{Side}Thigh",
       "{Side}Calf",
       "leg_upper_{S}",
@@ -150,26 +90,6 @@
     [
       "Pelvis",
       "pelvis"
-    ],
-    [
-      "{Side}Finger13",
-      "finger_thumb_2_{S}"
-    ],
-    [
-      "{Side}Finger23",
-      "finger_index_2_{S}"
-    ],
-    [
-      "{Side}Finger33",
-      "finger_middle_2_{S}"
-    ],
-    [
-      "{Side}Finger43",
-      "finger_ring_2_{S}"
-    ],
-    [
-      "{Side}Finger53",
-      "finger_pinky_2_{S}"
     ],
     [
       "{Side}Toes2",
@@ -231,5 +151,21 @@
     "LeftShoulder",
     "arm_upper_L",
     "ball_L"
-  ]
+  ],
+  "torso": [
+    "Pelvis",
+    "Spine1",
+    "Spine2",
+    "Spine3",
+    "Spine4",
+    "Spine5",
+    "LeftClavicle",
+    "RightClavicle"
+  ],
+  "torso_stop": [
+    "Neck",
+    "Head",
+    "TailBase"
+  ],
+  "torso_smoothing": 5.0
 }

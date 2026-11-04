@@ -348,6 +348,97 @@ def retarget_weights(ob, target, src=None):
             g.add([i], w, "REPLACE")
 
 
+def laplacian_offsets(co, edges):
+    """Each vertex minus the mean of its edge neighbours (how far it pokes out of its surroundings)."""
+    import numpy as np
+    n = len(co)
+    acc = np.zeros((n, 3))
+    cnt = np.zeros(n)
+    np.add.at(acc, edges[:, 0], co[edges[:, 1]])
+    np.add.at(acc, edges[:, 1], co[edges[:, 0]])
+    np.add.at(cnt, edges[:, 0], 1)
+    np.add.at(cnt, edges[:, 1], 1)
+    return co - acc / np.maximum(cnt, 1)[:, None]
+
+
+def smooth_torso(meshes, base, torso, sigma=2.5):
+    """Remove bumps the fit put into the torso. The fit's displacement (fitted minus unfitted, placed)
+    is smoothed in space with a Gaussian of width sigma, sampled from the torso vertices of every mesh,
+    and each torso vertex takes the smoothed value (blended by how much it belongs to the torso, so limbs
+    and head stay put). Being spatial, layered pieces (outfit, decals, the neck of the head mesh) get the
+    same field as the skin under them. Returns the body's bump change (worst, 95th percentile) before and
+    after: how far each vertex pokes out of its neighbours compared with the unfitted model."""
+    import numpy as np
+    from mathutils.kdtree import KDTree
+
+    cur, bas = {}, {}
+    for ob in meshes:
+        c = np.empty(len(ob.data.vertices) * 3)
+        ob.data.vertices.foreach_get("co", c)
+        cur[ob] = c.reshape(-1, 3)
+        bas[ob] = np.array(base[ob]).reshape(-1, 3)
+
+    # voxel-downsampled samples of the torso displacement
+    cell = sigma * 0.5
+    acc = {}
+    for ob in meshes:
+        f = torso[ob]
+        for p, d, w in zip(bas[ob][f > 0.5], (cur[ob] - bas[ob])[f > 0.5], f[f > 0.5]):
+            k = tuple(np.floor(p / cell).astype(int))
+            a = acc.setdefault(k, [np.zeros(3), np.zeros(3), 0.0])
+            a[0] += p * w
+            a[1] += d * w
+            a[2] += w
+    if not acc:
+        return None
+    sp = np.array([a[0] / a[2] for a in acc.values()])
+    sd = np.array([a[1] / a[2] for a in acc.values()])
+    sw = np.array([a[2] for a in acc.values()])
+    kd = KDTree(len(sp))
+    for i, p in enumerate(sp):
+        kd.insert(p, i)
+    kd.balance()
+
+    def field(p):
+        hits = kd.find_range(p, sigma * 3)
+        if not hits:
+            return None
+        idx = np.array([i for _, i, _ in hits])
+        dist = np.array([dd for _, _, dd in hits])
+        w = np.exp(-(dist / sigma) ** 2 / 2) * sw[idx]
+        return (sd[idx] * w[:, None]).sum(0) / w.sum()
+
+    body = max(meshes, key=lambda o: float(np.sum(torso[o])))
+    edges = np.empty(len(body.data.edges) * 2, dtype=np.int64)
+    body.data.edges.foreach_get("vertices", edges)
+    edges = edges.reshape(-1, 2)
+    region = torso[body] > 0.05
+
+    def bump(c):
+        d = np.linalg.norm(laplacian_offsets(c, edges) - laplacian_offsets(bas[body], edges), axis=1)[region]
+        return (round(float(d.max()), 4), round(float(np.percentile(d, 95)), 4)) if len(d) else (0.0, 0.0)
+
+    before = bump(cur[body])
+    after = None
+    for ob in meshes:
+        f = np.clip(torso[ob], 0, 1)
+        delta = np.zeros_like(cur[ob])
+        for i in np.nonzero(f > 0.01)[0]:
+            fd = field(bas[ob][i])
+            if fd is not None:
+                delta[i] = f[i] * ((bas[ob][i] + fd) - cur[ob][i])
+        if ob is body:
+            after = bump(cur[ob] + delta)
+        if not delta.any():
+            continue
+        for data in [ob.data.vertices] + ([kb.data for kb in ob.data.shape_keys.key_blocks] if ob.data.shape_keys else []):
+            for i, d in enumerate(data):
+                if delta[i].any():
+                    d.co = d.co + Vector(delta[i])
+        ob.data.update()
+    return before, after
+
+
 def fit_to_hero(src_arm, meshes, hero_arm, bonemap, side_bones=("LeftThigh", "RightThigh"),
                 height_bones=("Head", "head", "ball_L"), keep_patterns=()):
     """Fit meshes skinned to src_arm onto hero_arm without touching the hero's bones.
@@ -389,6 +480,7 @@ def fit_to_hero(src_arm, meshes, hero_arm, bonemap, side_bones=("LeftThigh", "Ri
         for v in ob.data.vertices:
             v.co = T @ v.co
         ob.data.update()
+    base = {ob: [v.co.copy() for v in ob.data.vertices] for ob in meshes}
     h = {n: T @ p for n, p in h.items()}
 
     maps, rots = {}, {}
@@ -458,10 +550,34 @@ def fit_to_hero(src_arm, meshes, hero_arm, bonemap, side_bones=("LeftThigh", "Ri
             eb.parent = ebs.get(parent if parent in kept_names else mapped_target(parent or ""))
         bpy.ops.object.mode_set(mode="OBJECT")
 
+    stop = set(bonemap.get("torso_stop", []))
+
+    def map_key(name):
+        """The mapped bone a vertex group rides on; None for anything under a torso_stop bone (neck, head)."""
+        b = bones.get(name)
+        while b and b.name not in maps:
+            if b.name in stop:
+                return None
+            b = b.parent
+        return b.name if b and b.name not in stop else None
+
+    torso_keys = set(bonemap.get("torso", []))
+    torso = {}
     for ob in meshes:
         deform_dq(ob, bone_map)
+        is_torso = {g.index: map_key(g.name) in torso_keys for g in ob.vertex_groups}
+        fr = []
+        for v in ob.data.vertices:
+            tot = sum(g.weight for g in v.groups)
+            fr.append(sum(g.weight for g in v.groups if is_torso.get(g.group)) / tot if tot > 0 else 0.0)
+        torso[ob] = fr
+    import numpy as np
+    torso = {ob: np.array(fr) for ob, fr in torso.items()}
+    bumps = smooth_torso(meshes, base, torso, bonemap.get("torso_smoothing", 2.5)) if torso_keys else None
+    for ob in meshes:
         retarget_weights(ob, target)
         reparent(ob, hero_arm)
+    fit_to_hero.last_bumps = bumps
     return yaw, scale
 
 
