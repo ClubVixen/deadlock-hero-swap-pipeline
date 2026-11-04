@@ -517,7 +517,7 @@ def keep_bone(name, patterns):
 
 
 def fit_to_hero(src_arm, meshes, hero_arm, bonemap, side_bones=("LeftThigh", "RightThigh"),
-                height_bones=("Head", "head", "ball_L"), keep_patterns=(), clearance=True):
+                height_bones=("Head", "head", "ball_L"), keep_patterns=(), clearance=True, keep_head=True):
     """Fit meshes skinned to src_arm onto hero_arm without touching the hero's bones.
 
     Turns the character to face +X, scales it to the hero's height, moves each mapped bone
@@ -598,6 +598,29 @@ def fit_to_hero(src_arm, meshes, hero_arm, bonemap, side_bones=("LeftThigh", "Ri
                     maps[s0] = segment_map(h[s0], h[s1], j0, j1)
                     rots[s0] = (h[s1] - h[s0]).rotation_difference(j1 - j0)
     bones = src_arm.data.bones
+    # keep the character's own neck length: heroes like Abrams carry the head low between big
+    # shoulders, and putting the neck on the hero's neck joint sinks the character's head into the
+    # torso. The neck (and the head riding on it) goes to the character's own height above the
+    # shoulders, and follows the hero's neck sideways and front-to-back so animations still line up.
+    # The lift is applied after the torso smoothing, blended by each vertex's neck/head weight, so
+    # the throat skin and everything inside the head (mouth, tongue, eyes) move together.
+    anchor = bonemap.get("head_anchor")
+    lift, neck_name = None, None
+    if keep_head and anchor:
+        n, s_sh, d_sh = anchor["neck"], anchor["src_shoulders"], anchor["dst_shoulders"]
+        dn = anchor.get("dst_neck")
+        if n in h and dn in hero and all(x in h for x in s_sh) and all(x in hero for x in d_sh):
+            s_mid = sum((h[x] for x in s_sh), Vector()) / len(s_sh)
+            d_mid = sum((hero[x] for x in d_sh), Vector()) / len(d_sh)
+            target = Vector((hero[dn].x, hero[dn].y, d_mid.z + (h[n].z - s_mid.z)))
+            b = src_arm.data.bones.get(n)
+            while b and b.name not in maps:
+                b = b.parent
+            where = (maps[b.name] @ h[n]) if b else h[n]
+            # only ever raise the head: lowering it (a hero with a longer neck than the character)
+            # squashes the throat and pushes the mouth through the chin
+            if (target - where).z > 0:
+                lift, neck_name = target - where, n
     for sp, dp in bonemap["terminals"]:
         for s, d in _pairs(sp, dp):
             if s in h and d in hero and s not in maps:
@@ -627,6 +650,14 @@ def fit_to_hero(src_arm, meshes, hero_arm, bonemap, side_bones=("LeftThigh", "Ri
         k = nearest_key[first.name]
         return maps[k] if k else Matrix.Identity(4)
 
+    def under_neck(name):
+        b = bones.get(name)
+        while b:
+            if b.name == neck_name:
+                return True
+            b = b.parent
+        return False
+
     kept = [b for b in bones if keep_bone(b.name, keep_patterns)]
     kept_names = {b.name for b in kept}
     # Source 2 only takes letters, digits and _ in bone names (AC_hair_A.R -> AC_hair_A_R)
@@ -649,6 +680,9 @@ def fit_to_hero(src_arm, meshes, hero_arm, bonemap, side_bones=("LeftThigh", "Ri
             kids = [c for c in b.children if c.name in kept_names]
             if kids:  # point the bone at its first kept child, so jiggle chains have real lengths
                 tail = to_arm @ (bone_map(kids[0].name) @ (T @ (src_arm.matrix_world @ kids[0].head_local)))
+            if lift is not None and under_neck(b.name):
+                head = head + to_arm.to_3x3() @ lift
+                tail = tail + to_arm.to_3x3() @ lift
             if (tail - head).length < 1e-3:
                 tail = head + Vector((0, 0, 1))
             eb = ebs.get(safe[b.name]) or ebs.new(safe[b.name])
@@ -688,6 +722,21 @@ def fit_to_hero(src_arm, meshes, hero_arm, bonemap, side_bones=("LeftThigh", "Ri
     if torso_keys and clearance:
         body = max(meshes, key=lambda o: float(np.sum(torso[o])))
         fit_to_hero.last_pushed = restore_clearance(meshes, base, body)
+    if lift is not None and lift.length > 1e-6:
+        for ob in meshes:
+            up = {g.index for g in ob.vertex_groups if under_neck(g.name)}
+            if not up:
+                continue
+            w = []
+            for v in ob.data.vertices:
+                tot = sum(g.weight for g in v.groups if g.weight > 0 and bones.get(ob.vertex_groups[g.group].name))
+                w.append(sum(g.weight for g in v.groups if g.group in up) / tot if tot > 0 else 0.0)
+            for data in [ob.data.vertices] + ([kb.data for kb in ob.data.shape_keys.key_blocks] if ob.data.shape_keys else []):
+                for i, x in enumerate(w):
+                    if x > 0:
+                        data[i].co = data[i].co + lift * min(x, 1.0)
+            ob.data.update()
+    fit_to_hero.last_lift = tuple(lift) if lift is not None else None
     for ob in meshes:
         retarget_weights(ob, target)
         reparent(ob, hero_arm)
@@ -1221,7 +1270,7 @@ def is_see_through(ob):
     return any(s.material and material_images(s.material)["translucent"] for s in ob.material_slots)
 
 
-def delete_covered_skin(body, outfit, max_dist, gap=None):
+def delete_covered_skin(body, outfit, max_dist, gap=None, protect=None):
     """Keep skin from showing through clothes.
     1. Skin points that poke out past the cloth, or sit closer under it than gap, are pushed in to
        gap under it (a low-poly bra over a rounder, denser chest cuts through it between its points).
@@ -1241,7 +1290,7 @@ def delete_covered_skin(body, outfit, max_dist, gap=None):
         verts += [mw @ v.co for v in ob.data.vertices]
         tris += [tuple(base + i for i in t.vertices) for t in ob.data.loop_triangles]
     if not tris:
-        return 0
+        return 0, 0
     tree = BVHTree.FromPolygons(verts, tris)
     mw = body.matrix_world
     nm = mw.inverted().transposed().to_3x3()
@@ -1255,15 +1304,29 @@ def delete_covered_skin(body, outfit, max_dist, gap=None):
         return tree.ray_cast(p + n * eps, -n, max_dist)[0] is not None
 
     me = plain_mesh(body)
+    # skin weighted mostly to the neck or head is left alone: pushing a throat in under a collar
+    # opens the mouth's inside up under the chin
+    protect = set(protect or ())
+    keep = set()
+    if protect:
+        pidx = {g.index for g in body.vertex_groups if g.name in protect}
+        for v in me.vertices:
+            tot = sum(g.weight for g in v.groups)
+            if tot > 0 and sum(g.weight for g in v.groups if g.group in pidx) / tot > 0.3:
+                keep.add(v.index)
     # 1. push poking / too-close skin in under the cloth
     mwi3 = mw.inverted().to_3x3()
     moves = {}
     for v in me.vertices:
+        if v.index in keep:
+            continue
         p, n = mw @ v.co, (nm @ v.normal).normalized()
-        back = tree.ray_cast(p + n * max_dist, -n, max_dist * 2)  # the outermost cloth along the normal
-        if back[0] is not None:
+        back = tree.ray_cast(p + n * max_dist * 0.5, -n, max_dist)  # the outermost cloth along the normal
+        # only where the cloth runs along the skin (not a collar edge under a chin), and never deeper
+        # than the cover distance
+        if back[0] is not None and abs(back[1].normalized().dot(n)) > 0.7:
             depth = (p - back[0]).dot(n)  # > 0: skin is outside the cloth
-            if depth > -gap:
+            if -gap < depth < max_dist * 0.75:
                 moves[v.index] = mwi3 @ (-n * (depth + gap))
     for data in [me.vertices] + ([kb.data for kb in me.shape_keys.key_blocks] if me.shape_keys else []):
         for i, m in moves.items():
@@ -1275,7 +1338,7 @@ def delete_covered_skin(body, outfit, max_dist, gap=None):
     bm.faces.ensure_lookup_table()
     gone = []
     for f in bm.faces:
-        if all(vcov[v.index] for v in f.verts) and covered(mw @ f.calc_center_median(), nm @ f.normal):
+        if not any(v.index in keep for v in f.verts) and all(vcov[v.index] for v in f.verts) and covered(mw @ f.calc_center_median(), nm @ f.normal):
             gone.append(f)
     bmesh.ops.delete(bm, geom=gone, context="FACES_ONLY")
     loose = [v for v in bm.verts if not v.link_faces]

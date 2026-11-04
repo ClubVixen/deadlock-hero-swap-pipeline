@@ -73,7 +73,7 @@ def hero_items(_self, context):
             p = prefs()
             heroes = build.list_heroes(bpy.path.abspath(p.vrf_cli), bpy.path.abspath(p.deadlock_dir),
                                        os.path.join(bpy.path.abspath(p.work_dir), "ref"))
-            _HERO_ITEMS = [(m, f"{os.path.basename(m)[:-5]}  ({k})", m) for k, m in heroes]
+            _HERO_ITEMS = [(m, f"{n or k}  ({os.path.basename(m)[:-5]})", f"{k}: {m}") for k, m, n in heroes]
         except Exception:
             _HERO_ITEMS = []
     return _HERO_ITEMS or [("", "(set the tool paths, then Refresh)", "")]
@@ -133,6 +133,8 @@ class HeroSwapSettings(bpy.types.PropertyGroup):
                                               ("DST", "Hero bones", "The hero's bone for each joint")], default="SRC")
     row_index: IntProperty()
     # fit
+    keep_head: BoolProperty(name="Keep Head Proportions", default=True,
+                            description="Keep the character's own neck length above the shoulders instead of putting the neck on the hero's neck joint (heroes with low, hunched heads like Abrams would sink the head into the torso)")
     keep_jiggle: BoolProperty(name="Keep Jiggle Bones", default=True,
                               description="Keep hair/tail/chest/butt/ear chains as bones on the hero skeleton so they can get physics")
     jiggle_presets: StringProperty(name="Jiggle Presets", subtype="FILE_PATH", default=DEFAULT_JIGGLE,
@@ -411,7 +413,11 @@ class HEROSWAP_OT_hide_skin(bpy.types.Operator):
             self.report({"ERROR"}, "Select the outfit pieces (or set Outfit Prefix)")
             return {"CANCELLED"}
         dist = s.skin_cover or 0.02 * body_height(s.character_rig)
-        pushed, n = core.delete_covered_skin(s.body_mesh, outfit, dist)
+        # the neck, head and everything under them (jaw, tongue, ears) are never touched
+        rig = rigmap.Rig.from_armature(s.character_rig)
+        neck = rigmap.find_joints(rig).get("neck")
+        protect = {neck, *rig.descendants(neck)} if neck else set()
+        pushed, n = core.delete_covered_skin(s.body_mesh, outfit, dist, protect=protect)
         self.report({"INFO"}, f"Pushed {pushed} skin points in under the cloth, deleted {n} fully covered skin faces")
         return {"FINISHED"}
 
@@ -572,7 +578,7 @@ class HEROSWAP_OT_fit(bpy.types.Operator):
         before = {b.name for b in s.hero_rig.data.bones}
         bm = core.load_bonemap(s.bonemap)
         try:
-            yaw, scale = core.fit_to_hero(s.character_rig, meshes, s.hero_rig, bm, keep_patterns=keep)
+            yaw, scale = core.fit_to_hero(s.character_rig, meshes, s.hero_rig, bm, keep_patterns=keep, keep_head=s.keep_head)
         except KeyError as e:
             self.report({"ERROR"}, f"Bone not found: {e}. Check the bone map matches both rigs")
             return {"CANCELLED"}
@@ -740,6 +746,15 @@ class HEROSWAP_OT_build(bpy.types.Operator):
 
 # --- panels ------------------------------------------------------------------------------------
 
+def button(layout, op, **kw):
+    """layout.operator, drawn red when the guide highlights it (Scene.hero_swap_highlight)."""
+    hl = [x.strip() for x in bpy.context.scene.hero_swap_highlight.split(",") if x.strip()]
+    if op.bl_idname in hl:
+        layout = layout.row(align=True)
+        layout.alert = True
+    return layout.operator(op.bl_idname, **kw)
+
+
 class _Panel:
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
@@ -787,9 +802,9 @@ class HEROSWAP_PT_hero(_Step, bpy.types.Panel):
         col = self.layout.column()
         row = col.row(align=True)
         row.prop(s, "hero_choice", text="")
-        row.operator(HEROSWAP_OT_refresh_heroes.bl_idname, text="", icon="FILE_REFRESH")
+        button(row, HEROSWAP_OT_refresh_heroes, text="", icon="FILE_REFRESH")
         col.prop(s, "hero", text="Model")
-        col.operator(HEROSWAP_OT_import_hero.bl_idname, icon="IMPORT")
+        button(col, HEROSWAP_OT_import_hero, icon="IMPORT")
         col.prop(s, "hero_rig", text="Skeleton")
 
 
@@ -803,16 +818,16 @@ class HEROSWAP_PT_character(_Step, bpy.types.Panel):
         col.label(text="Import: SourceIO (.mdl), Source Tools", icon="INFO")
         col.label(text="(.dmx/.smd) or File > Append (.blend)")
         col.prop(s, "character_rig", text="Rig")
-        col.operator(HEROSWAP_OT_cleanup.bl_idname, icon="BRUSH_DATA")
+        button(col, HEROSWAP_OT_cleanup, icon="BRUSH_DATA")
         col.separator()
         col.prop(s, "source_materials", text="Materials")
-        col.operator(HEROSWAP_OT_load_textures.bl_idname, icon="TEXTURE")
+        button(col, HEROSWAP_OT_load_textures, icon="TEXTURE")
         col.separator()
         col.prop(s, "delete_materials", text="Delete")
-        col.operator(HEROSWAP_OT_delete_materials.bl_idname, icon="TRASH")
+        button(col, HEROSWAP_OT_delete_materials, icon="TRASH")
         col.separator()
         col.prop(s, "eye_texture_dir", text="Eye PNGs")
-        col.operator(HEROSWAP_OT_bake_eyes.bl_idname, icon="HIDE_OFF")
+        button(col, HEROSWAP_OT_bake_eyes, icon="HIDE_OFF")
 
 
 class HEROSWAP_PT_outfit(_Step, bpy.types.Panel):
@@ -825,7 +840,7 @@ class HEROSWAP_PT_outfit(_Step, bpy.types.Panel):
         box = col.box()
         box.label(text="Made for this rig (same bone names):")
         box.prop(context.scene, "hero_swap_merge_to_outfit", text="Merge onto Outfit Rig instead")
-        box.operator(HEROSWAP_OT_bonemerge.bl_idname, icon="MOD_ARMATURE")
+        button(box, HEROSWAP_OT_bonemerge, icon="MOD_ARMATURE")
         box = col.box()
         box.label(text="Made for another body / rig:")
         box.prop(s, "outfit_rig", text="Outfit Rig")
@@ -835,16 +850,16 @@ class HEROSWAP_PT_outfit(_Step, bpy.types.Panel):
         row.prop(s, "outfit_reach")
         row.prop(s, "outfit_gap")
         box.prop(s, "copy_weights")
-        box.operator(HEROSWAP_OT_fit_outfit.bl_idname, icon="MOD_CLOTH")
+        button(box, HEROSWAP_OT_fit_outfit, icon="MOD_CLOTH")
         box.prop(s, "skin_cover")
-        box.operator(HEROSWAP_OT_hide_skin.bl_idname, icon="MOD_MASK")
+        button(box, HEROSWAP_OT_hide_skin, icon="MOD_MASK")
         col.separator()
         col.prop(s, "skin_swaps", text="Swaps")
-        col.operator(HEROSWAP_OT_apply_skin.bl_idname, icon="MATERIAL")
+        button(col, HEROSWAP_OT_apply_skin, icon="MATERIAL")
         row = col.row(align=True)
         row.prop(s, "create_missing", text="Create Missing")
         row.prop(s, "max_distance", text="Max")
-        col.operator(HEROSWAP_OT_sync_shape_keys.bl_idname, icon="SHAPEKEY_DATA")
+        button(col, HEROSWAP_OT_sync_shape_keys, icon="SHAPEKEY_DATA")
 
 
 class HEROSWAP_PT_bonemap(_Step, bpy.types.Panel):
@@ -854,11 +869,11 @@ class HEROSWAP_PT_bonemap(_Step, bpy.types.Panel):
     def draw(self, context):
         s = settings(context)
         col = self.layout.column()
-        col.operator(HEROSWAP_OT_autodetect.bl_idname, icon="VIEWZOOM")
+        button(col, HEROSWAP_OT_autodetect, icon="VIEWZOOM")
         if len(s.rows):
             col.row(align=True).prop(s, "map_side", expand=True)
             col.template_list("HEROSWAP_UL_rows", "", s, "rows", s, "row_index", rows=12)
-            col.operator(HEROSWAP_OT_save_bonemap.bl_idname, icon="FILE_TICK")
+            button(col, HEROSWAP_OT_save_bonemap, icon="FILE_TICK")
         col.prop(s, "bonemap", text="File")
 
 
@@ -869,16 +884,17 @@ class HEROSWAP_PT_fit(_Step, bpy.types.Panel):
     def draw(self, context):
         s = settings(context)
         col = self.layout.column()
+        col.prop(s, "keep_head")
         col.prop(s, "keep_jiggle")
         if s.keep_jiggle:
             col.prop(s, "jiggle_presets", text="Presets")
-        col.operator(HEROSWAP_OT_fit.bl_idname, icon="ARMATURE_DATA")
+        button(col, HEROSWAP_OT_fit, icon="ARMATURE_DATA")
         col.separator()
         col.prop(s, "tail_root")
         row = col.row(align=True)
-        row.operator(HEROSWAP_OT_aim_tail.bl_idname, text="Point Backward", icon="FORWARD")
-        row.operator(HEROSWAP_OT_flip_tail.bl_idname, text="Flip", icon="ARROW_LEFTRIGHT")
-        col.operator(HEROSWAP_OT_write_jiggle.bl_idname, icon="PHYSICS")
+        button(row, HEROSWAP_OT_aim_tail, text="Point Backward", icon="FORWARD")
+        button(row, HEROSWAP_OT_flip_tail, text="Flip", icon="ARROW_LEFTRIGHT")
+        button(col, HEROSWAP_OT_write_jiggle, icon="PHYSICS")
 
 
 class HEROSWAP_PT_export(_Step, bpy.types.Panel):
@@ -892,13 +908,13 @@ class HEROSWAP_PT_export(_Step, bpy.types.Panel):
         col.prop(s, "export_collection", text="Meshes")
         col.prop(s, "skin_name", text="Skin Folder")
         col.prop(s, "export_dir", text="DMX Folder")
-        col.operator(HEROSWAP_OT_export.bl_idname, icon="EXPORT")
+        button(col, HEROSWAP_OT_export, icon="EXPORT")
         col.separator()
         col.prop(s, "remove_meshes", text="Replace")
         row = col.row(align=True)
         row.prop(s, "pak", text="Pak")
         row.prop(s, "install", text="Install")
-        col.operator(HEROSWAP_OT_build.bl_idname, icon="PACKAGE")
+        button(col, HEROSWAP_OT_build, icon="PACKAGE")
         col.label(text="Builds locally: CSDK + CS2 Workshop Tools", icon="INFO")
 
 
@@ -917,6 +933,8 @@ def register():
     for c in classes:
         bpy.utils.register_class(c)
     bpy.types.Scene.hero_swap = PointerProperty(type=HeroSwapSettings)
+    bpy.types.Scene.hero_swap_highlight = StringProperty(
+        name="Highlight", default="", description="Operator ids to draw in red (for screenshots)")
     bpy.types.Scene.hero_swap_merge_to_outfit = BoolProperty(
         name="Merge onto Outfit Rig", default=False,
         description="Bone-merge the selection onto the Outfit Rig (e.g. the outfit's original body) instead of the Character Rig")
@@ -924,6 +942,7 @@ def register():
 
 def unregister():
     del bpy.types.Scene.hero_swap_merge_to_outfit
+    del bpy.types.Scene.hero_swap_highlight
     del bpy.types.Scene.hero_swap
     for c in reversed(classes):
         bpy.utils.unregister_class(c)

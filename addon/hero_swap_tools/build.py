@@ -61,12 +61,23 @@ def list_heroes(vrf_cli, deadlock, cache_dir):
         _run([vrf_cli, "-i", os.path.join(deadlock, "game", "citadel", "pak01_dir.vpk"), "-f", "scripts/heroes.vdata_c",
               "-d", "-o", path])
     text = open(path, encoding="utf-8", errors="replace").read()
+    names = hero_names(deadlock)
     out = []
     for m in re.finditer(r'^\t(hero_\w+)\s*=\s*\n\t\{(.*?)^\t\}', text, re.M | re.S):
         mm = re.search(r'm_strModelName\s*=\s*resource_name:"([^"]+)"', m.group(2))
         if mm:
-            out.append((m.group(1), mm.group(1)))
-    return out
+            out.append((m.group(1), mm.group(1), names.get(m.group(1), "")))
+    return sorted(out, key=lambda x: (not x[2], (x[2] or x[0]).lower()))
+
+
+def hero_names(deadlock, language="english"):
+    """{hero key: display name}, e.g. hero_atlas -> Abrams, from the game's localization files."""
+    path = os.path.join(deadlock, "game", "citadel", "resource", "localization", "citadel_gc_hero_names",
+                        f"citadel_gc_hero_names_{language}.txt")
+    if not os.path.isfile(path):
+        return {}
+    text = open(path, encoding="utf-8", errors="replace").read()
+    return {k: v for k, v in re.findall(r'"(hero_\w+?):n"\s+"([^"]*)"', text) if not k.endswith("_search")}
 
 
 def extract_hero(vrf_cli, deadlock, model_path, out_root, sink=None):

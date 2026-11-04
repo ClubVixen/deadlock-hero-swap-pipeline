@@ -432,6 +432,10 @@ def build_bonemap(src, dst, src_joints=None, dst_joints=None):
         "side_bones": [sj.get("thigh_L") or sj.get("upperarm_L"), sj.get("thigh_R") or sj.get("upperarm_R")],
         "fallback": "nearest",
     }
+    if "neck" in sj and "neck" in dj and all(f"upperarm_{s}" in sj and f"upperarm_{s}" in dj for s in SIDES):
+        out["head_anchor"] = {"neck": sj["neck"], "dst_neck": dj["neck"],
+                              "src_shoulders": [sj["upperarm_L"], sj["upperarm_R"]],
+                              "dst_shoulders": [dj["upperarm_L"], dj["upperarm_R"]]}
     if has_feet and up_s and up_d:
         out["height_bones"] = [up_s, up_d, dj.get("toe_L") or dj.get("foot_L")]
         out["ground_bones"] = [sj[k] for k in ("toe_L", "toe_R", "foot_L", "foot_R") if k in sj]
