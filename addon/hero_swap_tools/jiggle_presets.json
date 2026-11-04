@@ -1,6 +1,6 @@
 {
-  "_comment": "First matching pattern wins. Fields are ModelDoc JiggleBone keys. jiggle_type: 0 rigid, 1 flexible, 2 neither (base spring only). Values start from the SFM .qci jiggle settings and are meant to be tuned in ModelDoc.",
-  "keep_patterns": ["HairBack*", "jiggle_hair*", "TailBase", "Tail*", "jiggle_tail*", "*Breast*", "*Buttock*", "*Butt"],
+  "_comment": "Patterns are case-insensitive; the first matching preset wins. Fields are ModelDoc JiggleBone keys. jiggle_type: 0 rigid, 1 flexible, 2 neither (base spring only). Values start from the SFM .qci jiggle settings and are meant to be tuned in ModelDoc. keep_patterns name the source bones that survive the fit as real bones; the defaults cover VA/ReVAmped (HairBack1, TailBase, LeftBreast1), Valve biped (bip_tail00, bip_breast_01_r, bip_head_hairFront), and Blender rigs (AC_hair_A.L, Breast.L, Butt.L, AC_L_ear_A).",
+  "keep_patterns": ["hairback*", "jiggle_hair*", "*hair*", "*ponytail*", "tailbase", "*tail*", "*breast*", "*buttock*", "*butt", "*butt?", "*butt.?", "*butt_?", "*butt2*", "*_ear_*", "ear_*"],
   "presets": [
     {"pattern": "TailBase", "skip": true},
     {"pattern": "*Breast*", "fields": {
@@ -17,6 +17,9 @@
       "jiggle_type": 1, "tip_mass": 160, "yaw_stiffness": 200, "yaw_damping": 5, "pitch_stiffness": 200, "pitch_damping": 5,
       "has_yaw_constraint": 1, "min_yaw": -120, "max_yaw": 120, "has_pitch_constraint": 1, "min_pitch": -50, "max_pitch": 50,
       "along_stiffness": 100, "along_damping": 0}},
+    {"pattern": "*ear*", "fields": {
+      "jiggle_type": 1, "tip_mass": 20, "yaw_stiffness": 250, "yaw_damping": 6, "pitch_stiffness": 250, "pitch_damping": 6,
+      "has_angle_constraint": 1, "angle_limit": 20, "along_stiffness": 100, "along_damping": 0}},
     {"pattern": "*", "fields": {
       "jiggle_type": 1, "tip_mass": 40, "yaw_stiffness": 150, "yaw_damping": 5, "pitch_stiffness": 150, "pitch_damping": 5,
       "has_angle_constraint": 1, "angle_limit": 35, "along_stiffness": 100, "along_damping": 0}}
