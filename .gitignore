@@ -1,6 +1,7 @@
 # personal configs point at local asset paths; only the example is shared
 config/*.json
 !config/example_hero_swap.json
+!config/example_build_config.json
 !config/bonemap_*.json
 *.blend
 *.blend1

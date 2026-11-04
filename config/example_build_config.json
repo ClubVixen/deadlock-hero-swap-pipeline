@@ -1,0 +1,17 @@
+{
+  "_comment": "Written by Hero Swap > Build + Install Mod next to the exported model; run again with: python tools/build_mod.py <this file>",
+  "hero": "abrams",
+  "model_dir": "models/heroes_wip/abrams",
+  "addon": "abrams_miruko",
+  "deadlock": "C:/Program Files (x86)/Steam/steamapps/common/Deadlock",
+  "csdk": "C:/path/to/Reduced_CSDK_12",
+  "cs2": "C:/Program Files (x86)/Steam/steamapps/common/Counter-Strike Global Offensive",
+  "vrf_cli": "C:/path/to/Source2Viewer-CLI.exe",
+  "work_root": "C:/path/to/work",
+  "dmx": "C:/path/to/Reduced_CSDK_12/content/citadel_addons/abrams_miruko/models/heroes_wip/abrams/dmx/abrams_swap.dmx",
+  "materials_manifest": "C:/path/to/Reduced_CSDK_12/content/citadel_addons/abrams_miruko/models/heroes_wip/abrams/materials.json",
+  "jiggle": "C:/path/to/Reduced_CSDK_12/content/citadel_addons/abrams_miruko/models/heroes_wip/abrams/jiggle_bones.vmdl.txt",
+  "remove_meshes": ["abrams_model", "abrams_face_model"],
+  "pak": 31,
+  "install": true
+}
