@@ -439,6 +439,41 @@ def smooth_torso(meshes, base, torso, sigma=2.5):
     return before, after
 
 
+def restore_clearance(meshes, base, body, reach=1.0):
+    """Push layered pieces (outfit, tail root) back out where the fit sank them into the body:
+    every vertex within reach of the body before the fit gets back at least its old signed height
+    above the skin (pieces tucked in on purpose stay tucked in, but no deeper)."""
+    from mathutils.bvhtree import BVHTree
+
+    def tree(coords):
+        return BVHTree.FromPolygons([Vector(c) for c in coords], [p.vertices[:] for p in body.data.polygons])
+
+    before = tree(base[body])
+    after = tree([v.co for v in body.data.vertices])
+    pushed = 0
+    for ob in meshes:
+        if ob is body:
+            continue
+        moves = {}
+        for i, (b, v) in enumerate(zip(base[ob], ob.data.vertices)):
+            hit = before.find_nearest(Vector(b), reach)
+            if hit[0] is None:
+                continue
+            old = (Vector(b) - hit[0]).dot(hit[1])  # height above the skin before (negative: tucked in)
+            now_hit = after.find_nearest(v.co)
+            if now_hit[0] is None:
+                continue
+            now = (v.co - now_hit[0]).dot(now_hit[1])
+            if now < old:
+                moves[i] = now_hit[1] * (old - now)
+        for data in [ob.data.vertices] + ([kb.data for kb in ob.data.shape_keys.key_blocks] if ob.data.shape_keys else []):
+            for i, m in moves.items():
+                data[i].co = data[i].co + m
+        ob.data.update()
+        pushed += len(moves)
+    return pushed
+
+
 def fit_to_hero(src_arm, meshes, hero_arm, bonemap, side_bones=("LeftThigh", "RightThigh"),
                 height_bones=("Head", "head", "ball_L"), keep_patterns=()):
     """Fit meshes skinned to src_arm onto hero_arm without touching the hero's bones.
@@ -574,6 +609,9 @@ def fit_to_hero(src_arm, meshes, hero_arm, bonemap, side_bones=("LeftThigh", "Ri
     import numpy as np
     torso = {ob: np.array(fr) for ob, fr in torso.items()}
     bumps = smooth_torso(meshes, base, torso, bonemap.get("torso_smoothing", 2.5)) if torso_keys else None
+    if torso_keys:
+        body = max(meshes, key=lambda o: float(np.sum(torso[o])))
+        fit_to_hero.last_pushed = restore_clearance(meshes, base, body)
     for ob in meshes:
         retarget_weights(ob, target)
         reparent(ob, hero_arm)
