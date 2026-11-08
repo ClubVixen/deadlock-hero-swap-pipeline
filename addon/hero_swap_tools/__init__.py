@@ -133,6 +133,10 @@ class HeroSwapSettings(bpy.types.PropertyGroup):
                                               ("DST", "Hero bones", "The hero's bone for each joint")], default="SRC")
     row_index: IntProperty()
     # fit
+    preserve_proportions: BoolProperty(name="Preserve Source Proportions (Experimental)", default=False,
+                                      description="Keep source bone lengths on a separate deformation rig driven by hero rotations. Requires in-game validation of contacts and physics")
+    preserve_torso: BoolProperty(name="Preserve Torso Proportions", default=False,
+                                description="Experimental: keep the pelvis-to-neck shape with one rigid offset. Align limbs to the hero; does not retarget the game's animation clips")
     keep_head: BoolProperty(name="Keep Head Proportions", default=True,
                             description="Keep the character's own neck length above the shoulders instead of putting the neck on the hero's neck joint (heroes with low, hunched heads like Abrams would sink the head into the torso)")
     keep_jiggle: BoolProperty(name="Keep Jiggle Bones", default=True,
@@ -578,11 +582,20 @@ class HEROSWAP_OT_fit(bpy.types.Operator):
         before = {b.name for b in s.hero_rig.data.bones}
         bm = core.load_bonemap(s.bonemap)
         try:
-            yaw, scale = core.fit_to_hero(s.character_rig, meshes, s.hero_rig, bm, keep_patterns=keep, keep_head=s.keep_head)
+            if s.preserve_proportions:
+                from . import proportions
+                report = proportions.fit(s.character_rig, meshes, s.hero_rig, bm)
+                yaw, scale = 0, report['scale']
+            else:
+                yaw, scale = core.fit_to_hero(s.character_rig, meshes, s.hero_rig, bm, keep_patterns=keep, keep_head=s.keep_head,
+                                            preserve_torso=s.preserve_torso)
         except KeyError as e:
             self.report({"ERROR"}, f"Bone not found: {e}. Check the bone map matches both rigs")
             return {"CANCELLED"}
         added = [b.name for b in s.hero_rig.data.bones if b.name not in before]
+        if s.preserve_proportions:
+            added = [new for old, new in report['names'].items()
+                     if core.keep_bone(old, keep) and old.lower() != 'tailbase']
         s.hero_rig["hero_swap_jiggle_bones"] = added
         tails = [n for n in added if "tail" in n.lower()]
         if tails and not s.tail_root:
@@ -677,6 +690,13 @@ class HEROSWAP_OT_export(bpy.types.Operator):
         model_folder = os.path.join(content_dir(s), *s.model_dir.split("/"))
         mats = core.export_materials(objs, content_dir(s), s.hero, s.skin_name, s.model_dir)
         os.makedirs(model_folder, exist_ok=True)
+        constraints = s.hero_rig.get('proportion_constraints') if s.hero_rig else None
+        constraint_path = os.path.join(model_folder, 'proportion_constraints.kv3')
+        if constraints:
+            with open(constraint_path, 'w') as f:
+                f.write(constraints)
+        elif os.path.isfile(constraint_path):
+            os.remove(constraint_path)
         with open(os.path.join(model_folder, "materials.json"), "w") as f:
             json.dump({"materials": mats}, f, indent=1)
         text, n = jiggle_text(s)
@@ -730,6 +750,9 @@ class HEROSWAP_OT_build(bpy.types.Operator):
             "remove_meshes": [m.strip() for m in s.remove_meshes.split(",") if m.strip()],
             "pak": s.pak, "install": s.install,
         }
+        constraint_path = os.path.join(model_folder, 'proportion_constraints.kv3')
+        if os.path.isfile(constraint_path):
+            cfg['proportion_constraints'] = constraint_path
         with open(os.path.join(model_folder, "build_config.json"), "w") as f:
             json.dump(cfg, f, indent=1)
         log = bpy.data.texts.get("hero_swap_build.log") or bpy.data.texts.new("hero_swap_build.log")
@@ -862,6 +885,7 @@ class HEROSWAP_PT_outfit(_Step, bpy.types.Panel):
         button(col, HEROSWAP_OT_sync_shape_keys, icon="SHAPEKEY_DATA")
 
 
+
 class HEROSWAP_PT_bonemap(_Step, bpy.types.Panel):
     bl_label = "4. Bone Map"
     step = "4"
@@ -884,6 +908,9 @@ class HEROSWAP_PT_fit(_Step, bpy.types.Panel):
     def draw(self, context):
         s = settings(context)
         col = self.layout.column()
+        col.prop(s, "preserve_proportions")
+        if not s.preserve_proportions:
+            col.prop(s, "preserve_torso")
         col.prop(s, "keep_head")
         col.prop(s, "keep_jiggle")
         if s.keep_jiggle:

@@ -517,7 +517,8 @@ def keep_bone(name, patterns):
 
 
 def fit_to_hero(src_arm, meshes, hero_arm, bonemap, side_bones=("LeftThigh", "RightThigh"),
-                height_bones=("Head", "head", "ball_L"), keep_patterns=(), clearance=True, keep_head=True):
+                height_bones=("Head", "head", "ball_L"), keep_patterns=(), clearance=True, keep_head=True,
+                preserve_torso=False):
     """Fit meshes skinned to src_arm onto hero_arm without touching the hero's bones.
 
     Turns the character to face +X, scales it to the hero's height, moves each mapped bone
@@ -630,6 +631,28 @@ def fit_to_hero(src_arm, meshes, hero_arm, bonemap, side_bones=("LeftThigh", "Ri
                 R = rots[p.name].to_matrix().to_4x4() if p else Matrix.Identity(4)
                 maps[s] = Matrix.Translation(hero[d]) @ R @ Matrix.Translation(-h[s])
 
+    # A series of individually rigid translations is NOT a rigid torso: skinning
+    # blends their differences into compression. Keep one pelvis-anchored offset
+    # for the axial chain instead. Limb maps still align hands and feet to the
+    # hero. This is a mesh-fit option, not replacement animation retargeting.
+    if preserve_torso:
+        axial = {src_pelvis_name}
+        n = anchor.get("neck") if anchor else None
+        b = bones.get(n) if n else None
+        while b:
+            axial.add(b.name)
+            if b.name == src_pelvis_name:
+                break
+            b = b.parent
+        delta = hero[hero_pelvis_name] - h[src_pelvis_name]
+        common = Matrix.Translation(delta)
+        for name in axial:
+            maps[name] = common.copy()
+            rots[name] = Quaternion()
+        # Descendant head/face bones inherit this offset. Do not add the old
+        # shoulder-height lift on top, which would lengthen the preserved neck.
+        lift, neck_name = None, None
+
     mapped_target = weight_target(src_arm, bonemap, hero)
     nearest_key = {}
 
@@ -705,7 +728,7 @@ def fit_to_hero(src_arm, meshes, hero_arm, bonemap, side_bones=("LeftThigh", "Ri
             b = b.parent
         return b.name if b and b.name not in stop else None
 
-    torso_keys = set(bonemap.get("torso", []))
+    torso_keys = set() if preserve_torso else set(bonemap.get("torso", []))
     torso = {}
     for ob in meshes:
         deform_dq(ob, bone_map)
@@ -867,13 +890,14 @@ def load_source_materials(objects, materials_root, force=False):
     (base colour, normal map, alpha). Returns {material: [textures loaded]}."""
     import os
     import re
-    index_vmt, index_vtf = {}, {}
+    index_vmt, index_vtf, exact_vmt = {}, {}, {}
     for dirpath, _, files in os.walk(materials_root):
         for f in files:
             full = os.path.join(dirpath, f)
             rel = os.path.relpath(full, materials_root).replace("\\", "/").lower()
             if f.lower().endswith(".vmt"):
                 index_vmt.setdefault(f.lower()[:-4], []).append(full)
+                exact_vmt[rel[:-4]] = full
             elif f.lower().endswith(".vtf"):
                 index_vtf[rel[:-4]] = full
                 index_vtf.setdefault(os.path.basename(rel)[:-4], full)
@@ -887,13 +911,17 @@ def load_source_materials(objects, materials_root, force=False):
         full = index_vtf.get(key) or index_vtf.get(os.path.basename(key))
         if not full:
             return None
-        name = os.path.splitext(os.path.basename(full))[0]
+        # Characters commonly all call their textures body/hair/eyes. Caching
+        # only by basename silently gives one pony another pony's materials.
+        name = os.path.relpath(full, materials_root).replace("\\", "/")
         img = bpy.data.images.get(name)
         if img is None or img.size[0] == 0:
             before = set(bpy.data.images)
             bpy.ops.sourceio.vtf(filepath=full, directory=os.path.dirname(full) + os.sep, files=[{"name": os.path.basename(full)}])
             new = [i for i in bpy.data.images if i not in before]
             img = new[0] if new else bpy.data.images.get(name)
+            if img:
+                img.name = name
         return img
 
     done = {}
@@ -906,7 +934,10 @@ def load_source_materials(objects, materials_root, force=False):
         info = material_images(mat)
         if info["color"] is not None and not info["color"].name.startswith("missing") and not force:
             continue
-        cands = index_vmt.get(mat.name.lower().split(".")[0])
+        source_path = str(mat.get("full_path", "")).replace("\\", "/").lower().removesuffix(".vmt")
+        if source_path.startswith("materials/"):
+            source_path = source_path[len("materials/"):]
+        cands = [exact_vmt[source_path]] if source_path in exact_vmt else index_vmt.get(mat.name.lower().split(".")[0])
         if not cands:
             continue
         text = open(cands[0], encoding="utf-8", errors="replace").read()
@@ -931,9 +962,14 @@ def load_source_materials(objects, materials_root, force=False):
             continue
         col = vtf(base)
         nrm = vtf(bump) if bump else None
+        iris_image = vtf(iris) if iris else None
         mat.use_nodes = True
         nt = mat.node_tree
         nt.nodes.clear()
+        if iris_image:
+            t = nt.nodes.new("ShaderNodeTexImage")
+            t.name = "$Iris"
+            t.image = iris_image
         out = nt.nodes.new("ShaderNodeOutputMaterial")
         bsdf = nt.nodes.new("ShaderNodeBsdfPrincipled")
         nt.links.new(bsdf.outputs[0], out.inputs[0])
@@ -1468,7 +1504,7 @@ def material_images(mat):
     return out
 
 
-def save_png(img, path, flip_green=False):
+def save_png(img, path, flip_green=False, alpha_as_gray=False):
     """Write any Blender image (file, packed, or SourceIO's in-memory VTF) to a PNG."""
     import os
     import numpy as np
@@ -1477,6 +1513,11 @@ def save_png(img, path, flip_green=False):
         return False
     px = np.empty(w * h * 4, dtype=np.float32)
     img.pixels.foreach_get(px)
+    if alpha_as_gray:
+        px = px.reshape(-1, 4)
+        px[:, :3] = px[:, 3:4]
+        px[:, 3] = 1.0
+        px = px.ravel()
     if flip_green:
         px = px.reshape(-1, 4)
         px[:, 1] = 1.0 - px[:, 1]
@@ -1563,6 +1604,13 @@ def export_materials(objects, addon_content, hero, skin="swap", model_dir=None):
             flags += '\t"F_TRANSLUCENT"\t"1"\n'
         elif info["alphatest"]:
             flags += '\t"F_ALPHA_TEST"\t"1"\n'
+        if (info["translucent"] or info["alphatest"]) and info.get("color"):
+            # Deadlock pbr.vfx takes opacity from its own texture input; the
+            # color PNG's alpha alone does not populate TextureTranslucency1.
+            alpha_path = os.path.join(folder, name + "_opacity.png")
+            if save_png(info["color"], alpha_path, alpha_as_gray=True):
+                files["opacity"] = f"{rel}/{name}_opacity.png"
+                flags += '\t"TextureTranslucency1"\t"' + files["opacity"] + '"\n'
         if info.get("uv_scale"):
             flags += '\t"g_vTexCoordScale"\t"[{:.3f} {:.3f}]"\n'.format(*info["uv_scale"])
         base = info.get("base_value") or tuple(mat.diffuse_color[:3])

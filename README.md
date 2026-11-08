@@ -12,6 +12,16 @@ sidebar is shown enlarged on the right.
 No game files or third-party model assets are included. Use only models you made or have
 permission to use.
 
+## Miruko / Abrams torso correction
+
+The experimental source-proportion workflow fixes the compressed Miruko torso in the
+saved Blender model and the tested Deadlock hideout pose. It retains source bone lengths
+and drives their rotations from Abrams's animation skeleton.
+
+**[Follow the illustrated Miruko correction guide](docs/miruko-abrams-proportions.md)**
+for the before/after screenshots, fitting and export steps, measured results, and
+remaining animation checks. Full combat animation and weapon-contact validation is pending.
+
 ## 0. One-time setup
 
 1. Install **Blender 5.2**, plus these add-ons (Edit > Preferences > Add-ons > Install):
@@ -108,7 +118,7 @@ then click **Save Bone Map**.
 
 ## Step 5: Fit
 
-Click **Fit Character to Hero**. The character is scaled to the hero's shoulder height and posed
+For the original fitting mode, click **Fit Character to Hero**. The character is scaled to the hero's shoulder height and posed
 into the hero's bind pose. Weights are renamed to hero bones, and everything is parented to the
 hero skeleton. The hero's bones are never changed.
 
