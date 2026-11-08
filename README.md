@@ -1,189 +1,287 @@
-# Deadlock hero swap pipeline
+# Deadlock Hero Swap — illustrated Blender tutorial
 
-Put any humanoid SFM or Blender character, with or without an outfit made for a different body,
-onto any Deadlock hero. Everything happens in one Blender sidebar, and the mod is compiled,
-packed and installed locally, with nothing compiled online.
+Fit a character and outfit to a Deadlock hero, preserve the character's proportions,
+set up secondary motion, and compile a local mod from Blender's **Hero Swap** sidebar.
+This guide follows the corrected Miruko → Abrams and ReVamped Trixie → Sinclair builds.
+The same workflow can be adapted to other humanoid models; bone maps, clothing fit,
+and animation contacts still need checking for each character.
 
-The two examples in this guide are only illustrations: Miruko IK replacing Abrams, and Krystal
-in the ReVAmped V4 Nightmare Moon outfit replacing Pocket. The same steps work for any hero and
-any humanoid model. In the screenshots, the button used in each step is drawn **red**, and the
-sidebar is shown enlarged on the right.
+![Trixie on Sinclair: compiled outfit and transparency in Deadlock](docs/images/cheerleader_runtime_front.png)
 
-No game files or third-party model assets are included. Use only models you made or have
-permission to use.
+*Actual Deadlock hideout capture. The outer top and skirt use 45% opacity; the bra remains opaque.*
 
-## Miruko / Abrams torso correction
+The screenshots show the real Blender controls and loaded game results. Older import
+and bone-map screenshots have a red button highlight and enlarged sidebar; newer
+screenshots show the interface directly. Full button names are repeated below.
 
-The experimental source-proportion workflow fixes the compressed Miruko torso in the
-saved Blender model and the tested Deadlock hideout pose. It retains source bone lengths
-and drives their rotations from Abrams's animation skeleton.
+## Start here
 
-**[Follow the illustrated Miruko correction guide](docs/miruko-abrams-proportions.md)**
-for the before/after screenshots, fitting and export steps, measured results, and
-remaining animation checks. Full combat animation and weapon-contact validation is pending.
+1. [Install the tools](#0-one-time-setup).
+2. [Import the hero](#step-1-hero) and [prepare the character](#step-2-character).
+3. [Fit the outfit](#step-3-outfit-optional), then optionally [test transparency](#optional-semi-transparent-clothing).
+4. [Check the bone map](#step-4-bone-map), then [preserve proportions and correct the tail](#step-5-fit-proportions-and-jiggle-bones).
+5. [Export, install and inspect in-game](#step-6-export-build-and-install).
 
-## Outfit shape matching and semi-transparent materials
-
-[Follow the general outfit and transparency tutorial](docs/outfit-shapes-transparency.md)
-for matching an imported outfit to existing body proportions, merging its rig,
-checking clothing clearance, correcting a tail, preserving jiggle bones and exporting
-an Alpha-slider transparency test. It includes screenshots of the actual controls.
+Keep three separate files: an untouched source scene, an editable fitted scene, and
+an export copy. Third-party models and compiled VPKs are not included in this repository.
 
 ## 0. One-time setup
 
-1. Install **Blender 5.2**, plus these add-ons (Edit > Preferences > Add-ons > Install):
-   - [Blender Source Tools](https://github.com/Artfunkel/BlenderSourceTools), for DMX import and export.
-     It needs a one-line fix on Blender 5: in `io_scene_valvesource/flex.py`, `addDrivers`, change
-     `fcurve.modifiers.remove(fcurve.modifiers[0])` to
-     `if len(fcurve.modifiers): fcurve.modifiers.remove(fcurve.modifiers[0])`.
-   - [SourceIO](https://github.com/REDxEYE/SourceIO), for compiled SFM `.mdl` models.
-   - `addon/hero_swap_tools` from this repo. Copy the folder into `%APPDATA%\Blender Foundation\Blender\5.2\scripts\addons`.
-2. Get the local build tools:
-   - [Source 2 Viewer CLI](https://github.com/ValveResourceFormat/ValveResourceFormat/releases), which reads the hero out of the game.
-   - **Reduced CSDK 12**, which compiles materials with Deadlock's shaders.
-   - **CS2 Workshop Tools**: in Steam, Counter-Strike 2 > Properties > DLC. These compile the model with AnimGraph 2.
-3. In Blender, press **N** in the 3D Viewport, open the **Hero Swap** tab and click **Tool Paths...**. Set:
-   - the Deadlock folder,
-   - the Reduced CSDK folder,
-   - the CS2 folder (`...\Counter-Strike Global Offensive`),
-   - `Source2Viewer-CLI.exe`,
-   - a work folder.
+The documented builds used **Blender 5.2** on Windows.
 
-The row **1 2 3 4 5 6 All** under Tool Paths shows one step at a time.
+| Tool | Purpose |
+|---|---|
+| [Blender Source Tools](https://github.com/Artfunkel/BlenderSourceTools) | Import/export source DMX and SMD assets |
+| [SourceIO](https://github.com/REDxEYE/SourceIO) | Import compiled SFM/Source `.mdl` assets and materials |
+| [Hero Swap add-on](addon/hero_swap_tools) | The sidebar workflow in this guide |
+| [Source 2 Viewer CLI](https://github.com/ValveResourceFormat/ValveResourceFormat/releases) | Extract the target hero from your installed game |
+| Reduced CSDK 12 | Compile materials with Deadlock shaders |
+| CS2 Workshop Tools | Compile the model with AnimGraph 2 |
 
-## Where the pieces come from
+Install and enable the Blender add-ons in **Edit → Preferences → Add-ons**. Copy this
+repository's `addon/hero_swap_tools` folder into
+`%APPDATA%\Blender Foundation\Blender\5.2\scripts\addons`, then restart Blender.
+Install CS2 Workshop Tools through Counter-Strike 2's Steam DLC settings.
 
-| What | Where | How it gets into Blender |
-|---|---|---|
-| The hero (Abrams, Pocket, any other) | Your Deadlock install, `game/citadel/pak01_dir.vpk` | Step 1 picks it from a list read from the game's `heroes.vdata`, then extracts it with Source 2 Viewer. You don't need to unpack anything by hand. |
-| An SFM character or outfit | A compiled `.mdl` with its `materials` folder (Workshop downloads, mod sites) | File > Import > Source Engine assets (SourceIO). |
-| A source DMX/SMD (for example the body an outfit was made for) | The model's `sourcefiles` | File > Import > Source Engine (Source Tools), with nothing selected. |
-| A Blender character | A `.blend` | Open it, then **File > Save As** a working copy. Save As keeps texture paths working; a copy made in Explorer breaks them (pink textures). |
+For the Source Tools version used here, Blender 5 required a guard in
+`io_scene_valvesource/flex.py`, inside `addDrivers`. If that version removes a modifier
+without checking whether one exists, replace that line with:
 
-The list shows each hero's display name and its internal model name, for example
-`Abrams (abrams)`, `Pocket (pocket)`, `Celeste (unicorn)`. Names come from the game's own
-localization files.
+```python
+if len(fcurve.modifiers):
+    fcurve.modifiers.remove(fcurve.modifiers[0])
+```
+
+In the 3D Viewport, press **N**, open **Hero Swap**, and click **Tool Paths...**.
+Set the Deadlock folder, Reduced CSDK folder, CS2 folder
+(`...\Counter-Strike Global Offensive`), `Source2Viewer-CLI.exe`, and a work folder.
+The **1 2 3 4 5 6 All** row selects the workflow sections.
 
 ## Step 1: Hero
 
-Pick the hero and click **Import Hero Skeleton**. The add-on:
+Choose the target hero and click **Import Hero Skeleton**. The add-on reads the hero
+list from your installed game, extracts the selected model, and imports its skeleton
+with the original mesh hidden as a reference.
 
-- extracts `models/heroes_wip/<hero>/<hero>.vmdl` and its meshes,
-- imports the skeleton, with the hero's own mesh hidden for reference,
-- fills in which hero meshes the mod replaces. The body, face, hair and coat are replaced;
-  weapons and ability props are kept.
+![Hero selection and Import Hero Skeleton button](docs/images/a1_import_hero.png)
 
-![Step 1](docs/images/a1_import_hero.png)
+Display and internal names can differ: Sinclair uses `magician`, for example. Check
+the replacement mesh list instead of assuming every mesh belongs to the body. Keep
+weapons and ability props unless you are deliberately replacing those too.
 
 ## Step 2: Character
 
-Set **Rig** to your character's armature, then use whichever buttons your model needs:
+Open a character `.blend` or import its source assets, then **File → Save As** a working
+copy. For compiled `.mdl` assets, use SourceIO; for DMX/SMD, use Source Tools. Check
+texture paths and pack or relink missing images before continuing.
 
-| Button | Use it when |
+In **2 / Character**, set **Rig** to the character's armature. Choose the body shape,
+outfit variants and feet you intend to use before fitting. Exclude unwanted alternatives
+from rendering/export as well as the viewport.
+
+![Character rig and cleanup controls](docs/images/a2_cleanup.png)
+
+| Control | When to use it |
 |---|---|
-| **Clean Up Character Meshes** | The character was made in Blender: Mask modifiers, empty Armature modifiers, bone-parented parts, leftover vertex groups. Meshes hidden from renders (alternate or NSFW parts) are left out automatically. |
-| **Load Source Textures** | An SFM model came in grey. SourceIO looks textures up case-sensitively. Point **Materials** at the model's `materials` folder. |
-| **Delete Faces with These Materials** | Remove parts by material name (for example `genitals`). Select the mesh first. |
-| **Convert Source Eyes to Textures** | SFM eyes (EyeRefract). Source 2 can't project them, so they're baked into UVs. Run it before the fit. |
+| **Clean Up Character Meshes** | Prepare modifiers, bone-parented parts and vertex groups for the swap |
+| **Load Source Textures** | Imported Source assets are grey; point Materials to their material folder |
+| **Convert Source Eyes to Textures** | Bake SourceIO/EyeRefract eyes before fitting; exclude separate eyelens meshes |
+| **Delete Faces with These Materials** | Deliberately remove unwanted geometry by material; work on a saved copy |
 
-![Step 2, Blender character (Miruko)](docs/images/a2_cleanup.png)
-
-![Step 2, SFM character (Krystal): textures, NSFW parts, eyes](docs/images/b2_textures_eyes.png)
+Keep the body shape values you want. Clothing should fit those values, rather than
+changing the body to compensate for an incorrectly fitted garment.
 
 ## Step 3: Outfit (optional)
 
-- **The outfit was made for the character's rig** (same bone names): select its meshes and
-  click **Bone-merge Selected onto Character**.
-- **The outfit was made for another body or rig**, like the Nightmare Moon outfit, which was
-  made for the VA anthro body and here goes on Krystal:
-  1. Import the body it was made for. Select that body, tick **Merge onto Outfit Rig instead**,
-     and click **Bone-merge Selected onto Character**.
-  2. Set **Outfit Rig**, **Its Body** and **New Body** (your character's skin mesh).
-  3. Click **Fit Outfit to Character**. The outfit is posed onto the character's skeleton, the old
-     body is morphed onto the new one, and the outfit is carried along with Surface Deform. Tight
-     pieces take the skin's weights.
-  4. Click **Delete Skin Under Outfit**. It removes skin the clothes fully cover, and pushes skin
-     that pokes through back under the cloth. Openings, see-through pieces, and the neck and head
-     are left alone.
-- **Skin Swaps** swaps materials by name (`old=new`). **Match Outfit to Body Shape Keys** makes
-  the outfit follow the body's sliders.
+### Outfit made for the same character skeleton
 
-![Step 3](docs/images/b3_outfit.png)
+In **3 / Outfit**, set **New Body** to the skin mesh. **Rig** is an armature;
+**New Body** is the mesh whose shape and surface the clothing should follow.
+
+1. Select only the garment meshes.
+2. Click **Match Outfit to Body Shape Keys**. Leave **Create Missing** off initially
+   when matching controls already exist on the garments.
+3. Click **Bone-merge Selected onto Character**, with **Merge onto Outfit Rig instead** off.
+4. Inspect front, side and top views. Check the chest, waist, crotch, gloves and foot openings.
+5. In the rest pose, set **Reach** and **Gap**, then click **Conform Clothing to Current Shape**.
+
+![Actual shape matching, bone merging and clothing-clearance controls](docs/images/cheerleader_fit_buttons.png)
+
+**Conform Clothing to Current Shape** uses the evaluated body and clothing surfaces.
+It moves intersecting clothing outward and applies the correction across its shape
+keys without reshaping the body. Apply topology-changing modifiers first. Set Reach
+and Gap relative to the model's scene scale; the example initially used `0.08` and
+`0.003` in source space. A narrow field may round the displayed Gap to `0.00`.
+
+This operation does not tighten every loose panel or create missing crotch coverage.
+Compare the actual clothing-to-body distance, inspect openings and garment layers,
+and correct remaining excess space or missing geometry manually. Repeat the check
+after changing shape values and after fitting to the hero.
+
+### Outfit made for a different body or skeleton
+
+1. Import the body the outfit was authored for.
+2. If needed, select that reference body, enable **Merge onto Outfit Rig instead**,
+   and bone-merge it onto the outfit rig.
+3. Set **Outfit Rig**, **Its Body**, and **New Body** to the outfit armature, its
+   original reference body, and your character's skin mesh respectively.
+4. Click **Fit Outfit to Character**, then inspect the result from several angles.
+
+Matching bone names alone does not establish compatible rest positions. Use the
+reference-body workflow for different rigs and keep a checkpoint before transferring.
+For opaque garments, **Delete Skin Under Outfit** can remove covered skin, but inspect
+the result carefully and retain skin beneath openings or translucent material.
+
+## Optional: semi-transparent clothing
+
+1. Select the outer garment and open **Material Properties** using the material sphere icon.
+2. Make a separate material copy if the same material is also used by an opaque underlayer.
+3. In the Principled BSDF **Surface**, set the unlinked **Alpha** slider to `0.45`.
+4. In Blender 5.2 material **Settings / Surface**, choose **Render Method: Blended**.
+5. Use Material Preview or Rendered view, and repeat for the appropriate material slots.
+
+![Material Properties, material slots and Alpha control](docs/images/cheerleader_material_alpha.png)
+
+`1.0` is opaque; `0.0` is invisible. The example keeps the bra opaque and makes the
+outer top/skirt 45% opaque. Keep the skin underneath transparent fabric.
+
+The exporter writes a separate opacity texture into `TextureTranslucency1` and enables
+`F_TRANSLUCENT`. An RGBA color texture alone does not supply this shader input.
+Arbitrary procedural Alpha networks are not baked by this workflow. Check layered
+transparency in-game: Blender preview alone cannot establish the final sorting or look.
 
 ## Step 4: Bone map
 
-Click **Auto-detect Bone Map**. It finds pelvis, spine, neck, head, jaw, arms, legs and fingers
-on both rigs from names and the hierarchy. Tested on Blender/Rigify, Valve biped (`bip_`),
-VA/ReVAmped and Deadlock rigs; IK, pole and control bones are skipped.
+Click **Auto-detect Bone Map**, then inspect both sides using **Character bones / Hero bones**.
+Check pelvis, torso, neck, shoulders, elbows, hands, fingers, thighs, knees and feet.
+Fix incorrect rows with the bone picker, then click **Save Bone Map**.
 
-Check the table with the **Character bones / Hero bones** switch. Fix any row by picking a bone,
-then click **Save Bone Map**.
+![Bone map controls and mapped character joints](docs/images/a4_bonemap.png)
 
-![Step 4, Blender rig](docs/images/a4_bonemap.png)
+A successful auto-detection is a starting point. In particular, do not squash a torso
+to compensate for a poor spine mapping or a hero with different proportions.
 
-![Step 4, Valve biped rig](docs/images/b4_bonemap.png)
+## Step 5: Fit, proportions and jiggle bones
 
-## Step 5: Fit
+Start from the clean pre-fit scene with a fresh hero skeleton.
 
-For the original fitting mode, click **Fit Character to Hero**. The character is scaled to the hero's shoulder height and posed
-into the hero's bind pose. Weights are renamed to hero bones, and everything is parented to the
-hero skeleton. The hero's bones are never changed.
+1. Enable **Preserve Source Proportions (Experimental)** and **Keep Jiggle Bones**.
+2. Choose a jiggle preset appropriate to the model. The
+   [ReVamped single-spring preset](config/jiggle_revamped_single_springs.json) used here
+   selects one breast and buttock spring per side, plus hair and tail chains.
+3. Click **Fit Character to Hero** once.
+4. Inspect the waist, shoulders, hands and feet. Repeat clothing clearance checks in
+   the hero rest pose using Reach and Gap scaled to the new character size.
+5. For a tail, set **Tail Root** to the whole chain's root, then click **Point Backward**.
+   Inspect side and rear views. Use **Flip** only if the curl needs reversing.
+6. Save a separate editable fitted `.blend`.
 
-- **Keep Head Proportions** (on by default): if the hero carries the head low, as Abrams does,
-  the character's head stays at its own height above the shoulders instead of sinking into the
-  torso. It only ever raises a head, never lowers it.
-- **Keep Jiggle Bones**: hair, ear, chest, butt and tail chains stay as bones, so they can get
-  physics. The patterns are in `jiggle_presets.json`.
-- **Point Backward** / **Flip**: use these if a tail comes out sideways or curls the wrong way
-  (the fit fills in the Tail Root).
+![Actual fit and jiggle settings, Tail Root and tail correction controls](docs/images/cheerleader_tail_controls.png)
 
-![Step 5, Miruko on Abrams, next to Abrams](docs/images/a5_fit_front.png)
+For this example the root is `CV_TailBase`, a stable attachment rather than an extra
+physics spring. The export retains 15 jiggle bones: two breast, two buttock, four hair
+and seven tail. Review the preset's bone names for each new character.
 
-![Step 5, side view](docs/images/a5_fit_side.png)
+### Why this avoids the compressed Miruko torso
 
-![Step 5, Krystal on Pocket, next to Pocket](docs/images/b5_fit_front.png)
+The original fit moves source joints onto the hero's joints, which can shorten a
+character's torso. **Preserve Source Proportions** instead adds a `CV_` deformation
+skeleton with uniformly scaled source lengths, driven by the hero's rotations.
+It preserves the hero's animation graph; it does not rewrite animation clips or
+change gameplay collision bounds. Hand/weapon and foot contacts still need testing.
 
-![Step 5, side view](docs/images/b5_fit_side.png)
+| Original fit: compressed torso | Corrected source-proportion fit |
+|---|---|
+| ![Miruko before the correction](docs/images/proportions_miruko_before.png) | ![Miruko with source proportions retained](docs/images/proportions_miruko_rest.png) |
 
-## Step 6: Export + Build
+Enabling the option on an already crushed mesh cannot restore the source geometry.
+Reopen the clean checkpoint. The older **Preserve Torso Proportions** option is a
+different experiment and is not the mode used here.
 
-1. Set **Addon** (any name), **Skin Folder**, and **Pak**. A lower pak number loads first, so it
-   wins over other mods for the same hero.
-2. Click **Export Model + Materials**. It writes PNG textures, Deadlock `.vmat` files, the jiggle
-   bones and a ModelDoc DMX into `<CSDK>/content/citadel_addons/<addon>/`.
-3. Click **Build + Install Mod**. Everything runs on your PC:
-   1. compiles the materials (CSDK),
-   2. rewrites the hero `.vmdl`: your mesh in, the hero's body out, weapons kept, material remaps
-      and jiggle bones added,
-   3. compiles the model (CS2 Workshop Tools),
-   4. packs `pakNN_dir.vpk` and copies it into `game/citadel/addons`.
+See the [Miruko correction guide](docs/miruko-abrams-proportions.md) for the running-pose
+preview, measured segment lengths and constraint details.
 
-![Step 6](docs/images/a6_export_build.png)
+## Step 6: Export, build and install
 
-To build again from a terminal (for example after editing a `.vmat`):
+Save the editable file, then make an export copy. If runtime flexes are unnecessary,
+bake the current shape mix in that copy. Clothing can remain separate mesh objects
+on the shared skeleton; joining everything is not required.
 
+In **6 / Export + Build**:
+
+1. Set a unique **Addon** and **Skin Folder**, and check the **Meshes** collection.
+2. Check **Replace**. Replace the intended body meshes while keeping weapons and
+   ability props; this Sinclair example replaces `magician_body`.
+3. Click **Export Model + Materials**.
+4. Choose an unused **Pak** number. Leave **Install** unchecked when using Deadlock
+   Mod Manager, then click **Build + Install Mod** to build the package.
+5. In your existing mod-manager profile, use **Add Local Mod** to import the resulting
+   VPK. Replace only the conflicting older mod for this hero and keep a restore copy.
+6. Restart Deadlock and inspect the loaded character.
+
+![Actual mesh collection, replacement list, export and build controls](docs/images/cheerleader_export_controls.png)
+
+The local build exports textures, materials, DMX, jiggle settings and
+`proportion_constraints.kv3`; compiles materials and the model; then packs the VPK.
+The builder merges proportion drivers into the hero's existing constraint list.
+Keep unrelated mods enabled. In this test, hashes confirmed that all other installed
+VPKs, including Sunset Shimmer for Celeste, were unchanged.
+
+## Check the result in Deadlock
+
+Inspect front, side and rear views in the hideout first. Check body shape, clothing
+coverage, transparent layers, tail direction and weapon attachment. Then test walking,
+running, crouching, jumping, melee, firing, abilities and animation transitions.
+Watch for clipping, foot sliding, grip offsets and unstable secondary motion.
+
+| Miruko on Abrams | Trixie on Sinclair, corrected tail |
+|---|---|
+| ![Corrected Miruko in Deadlock](docs/images/proportions_miruko_runtime.png) | ![Trixie outfit and tail in Deadlock](docs/images/cheerleader_runtime_side.png) |
+
+The two builds were inspected in the hideout. Miruko's measured segment lengths were
+preserved, and the Trixie build retained the original body sliders while exporting
+13 meshes, 20 materials and 15 jiggle bones. The final Trixie rest-pose vertex check
+found no garment vertices more than 0.1 mm inside the body in source scale.
+
+These checks do not certify every triangle or animated frame. Full combat-animation
+and individual physics-region testing remain pending. The Trixie compile completed
+with a single-LOD warning and no compile failures.
+
+## Troubleshooting
+
+| Symptom | Check |
+|---|---|
+| Torso is compressed | Reopen the source checkpoint and use **Preserve Source Proportions (Experimental)** |
+| Clothing still clips | Confirm **New Body**, match shape keys, check the evaluated surfaces, and repeat clearance after hero fitting |
+| Gloves or openings have excess space | Inspect the actual mesh distance; outward clearance does not tighten loose clothing |
+| Transparent cloth reveals holes | Restore the skin under that area from the editable checkpoint |
+| Alpha looks right in Blender but opaque in-game | Use the updated exporter and supported Alpha path; rebuild and restart the game |
+| Tail points sideways | Set the full chain's **Tail Root**, use **Point Backward**, and inspect from side/rear |
+| Character stays in a rest pose in-game | Confirm proportion constraints were exported and merged into the existing constraint list |
+| Stretched triangles | Inspect reported unweighted-vertex repairs and deliberate attachment weights |
+| Old model still appears | Check for another package replacing the same hero; resolve that conflict without disabling unrelated mods |
+
+## Detailed guides and developer reference
+
+- [Outfit matching, transparency and validation](docs/outfit-shapes-transparency.md)
+- [Miruko proportion correction and validation](docs/miruko-abrams-proportions.md)
+- [Trixie measurements](docs/cheerleader_validation.json) and [Miruko measurements](docs/miruko_proportion_validation.json)
+- [Example build configuration](config/example_build_config.json)
+- [Older batch-flow configuration](config/example_hero_swap.json), used with the scripts in `blender/`
+
+To rebuild an exported configuration locally:
+
+```powershell
+python tools/build_mod.py <path-to-build_config.json>
 ```
-python tools/build_mod.py <CSDK>/content/citadel_addons/<addon>/models/heroes_wip/<hero>/build_config.json
+
+To run the ModelDoc constraint regression checks:
+
+```powershell
+python -m unittest discover -s tests -p test_modeldoc.py
 ```
 
-`config/example_build_config.json` lists every key.
-
-## Reference
-
-- **Bone map format:**
-  - `segments` are joint pairs that are posed onto the target's (a fifth entry `"move"` only slides the joint).
-  - `terminals` are end joints that only move and turn with their parent.
-  - `groups` renames vertex groups (`fnmatch` patterns; `{Side}` and `{S}` expand to Left/L and Right/R).
-  - `head_anchor`, `pelvis`, `side_bones`, `height_bones` / `ground_bones` or `scale_bones` tune the placement.
-
-  Unmapped bones ride with their nearest mapped ancestor.
-- **Mod conflicts:** if another installed mod replaces the same hero with a lower pak number,
-  disable it in Deadlock Mod Manager or pick a lower number.
-- **Headless scripts:** `blender/01_import_sfm.py`, `02_fit_to_hero.py` and `03_export_dmx.py`
-  run the older config-driven batch flow (see `config/example_hero_swap.json`).
-- **Known limits:**
-  - Only LOD 0 is shipped.
-  - Jiggle values and material roughness are starting points.
-  - Leave SFM eyelens meshes out.
-  - Source Tools runs Undo after each export. That's fine when you click the button, but it stops
-    scripts that drive Blender remotely until Blender is restarted.
+Only LOD 0 is included in these builds. Material and jiggle settings are starting
+points for model-specific testing. Source Tools' export Undo behavior also needs
+special handling in remote/headless scripts; use the provided automation paths
+rather than assuming an interactive export behaves identically in a background job.
