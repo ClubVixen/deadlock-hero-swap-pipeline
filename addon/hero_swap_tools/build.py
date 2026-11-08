@@ -30,7 +30,7 @@ import zlib
 from . import kv3
 
 KEEP_WORDS = ("gun", "weapon", "book", "briefcase", "frog", "baton", "blade", "sword", "staff", "shield",
-              "bow", "arrow", "knife", "dagger", "hammer", "card", "bat", "prop", "fx")
+              "bow", "arrow", "knife", "dagger", "hammer", "card", "bat", "wand", "prop", "fx")
 BODY_WORDS = ("body", "head", "face", "hair", "coat", "jacket", "scarf", "model", "cloak", "cape", "skirt",
               "teeth", "eyes", "glow", "hornglow", "lower", "upper")
 
@@ -134,7 +134,8 @@ def _lod_base(name):
 
 def rewrite_vmdl(src_vmdl, out_vmdl, mesh_name, dmx_rel, remove, remaps=None, jiggle_text=None):
     """Swap the hero's body meshes for ours, keep LOD 0 only, add material remaps and jiggle bones."""
-    header, root = kv3.loads(open(src_vmdl, encoding="utf-8").read())
+    with open(src_vmdl, encoding="utf-8") as source:
+        header, root = kv3.loads(source.read())
     top = root["rootNode"]["children"]
     remove = set(remove)
 
@@ -146,11 +147,17 @@ def rewrite_vmdl(src_vmdl, out_vmdl, mesh_name, dmx_rel, remove, remaps=None, ji
     ours = {"_class": kv3.q("RenderMeshFile"), "name": kv3.q(mesh_name), "filename": kv3.q(dmx_rel)}
     rml["children"] = [ours] + kept
 
+    # A combined replacement mesh can belong to only one body group. Replacing
+    # both body and face groups with it makes the compiler reject duplicate refs.
+    owner = next((g for g in kv3.find(root, "BodyGroup")
+                  if any(_lod_base(kv3.unq(n)) in remove
+                         for c in kv3.find(g, "BodyGroupChoice") for n in c.get("meshes", []))), None)
+    owner_choices = {id(c) for c in kv3.find(owner, "BodyGroupChoice")} if owner else set()
     for choice in kv3.find(root, "BodyGroupChoice"):
         names = [kv3.unq(m) for m in choice.get("meshes", [])]
         had_body = any(_lod_base(n) in remove for n in names)
         new = [n for n in names if keep(n)]
-        if had_body and mesh_name not in new:
+        if had_body and (owner is None or id(choice) in owner_choices) and mesh_name not in new:
             new.insert(0, mesh_name)
         choice["meshes"] = [kv3.q(n) for n in new]
 
@@ -234,6 +241,17 @@ def pack_vpk(root, out):
 
 # --- the whole build ---------------------------------------------------------------------------
 
+def merge_constraints(document, constraints):
+    """Keep one AnimConstraintList: the compiler ignores later duplicate lists."""
+    children = document["rootNode"]["children"]
+    existing = next((node for node in children
+                     if kv3.unq(node.get("_class", "")) == "AnimConstraintList"), None)
+    if existing is None:
+        children.append(constraints)
+    else:
+        existing.setdefault("children", []).extend(constraints.get("children", []))
+
+
 def build(cfg, sink=None):
     """Run every local step. Returns the installed VPK path."""
     hero = cfg["hero"]
@@ -273,6 +291,12 @@ def build(cfg, sink=None):
     jiggle = open(cfg["jiggle"], encoding="utf-8").read() if cfg.get("jiggle") and os.path.isfile(cfg["jiggle"]) else None
     out_vmdl = os.path.join(cs2_model, f"{hero}.vmdl")
     meshes = rewrite_vmdl(src_vmdl, out_vmdl, mesh_name, dmx_rel, remove, remaps, jiggle)
+    if cfg.get("proportion_constraints"):
+        header, document = kv3.loads(open(out_vmdl, encoding="utf-8").read())
+        _, constraints = kv3.loads(open(cfg["proportion_constraints"], encoding="utf-8").read())
+        merge_constraints(document, constraints)
+        with open(out_vmdl, "w", encoding="utf-8") as f:
+            f.write(kv3.dumps(header, document))
     log(f"wrote {out_vmdl} with render meshes {meshes}", sink)
 
     # stub materials so CS2 can compile (it has no Deadlock pbr shader); the game uses the real ones
