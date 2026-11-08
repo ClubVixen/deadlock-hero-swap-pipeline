@@ -22,6 +22,13 @@ and drives their rotations from Abrams's animation skeleton.
 for the before/after screenshots, fitting and export steps, measured results, and
 remaining animation checks. Full combat animation and weapon-contact validation is pending.
 
+## Outfit shape matching and semi-transparent materials
+
+[Follow the general outfit and transparency tutorial](docs/outfit-shapes-transparency.md)
+for matching an imported outfit to existing body proportions, merging its rig,
+checking clothing clearance, correcting a tail, preserving jiggle bones and exporting
+an Alpha-slider transparency test. It includes screenshots of the actual controls.
+
 ## 0. One-time setup
 
 1. Install **Blender 5.2**, plus these add-ons (Edit > Preferences > Add-ons > Install):

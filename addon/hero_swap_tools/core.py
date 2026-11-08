@@ -774,6 +774,97 @@ def _key_coords(ob, kb):
     return co.reshape(-1, 3)
 
 
+def align_weighted_regions(meshes, reference, patterns, strength=1.0, scale=1.0):
+    """Align matching weighted regions without needing the outfit's original rig.
+
+    Useful for gloves with shared finger names but different rest positions. This
+    is an initial fit, not a substitute for checking finger bends and clearance.
+    Apply before hero fitting and before transferring the final skin weights.
+    """
+    import fnmatch
+    def centers(ob):
+        names = {g.index: g.name for g in ob.vertex_groups
+                 if any(fnmatch.fnmatchcase(g.name.lower(), p.lower()) for p in patterns)}
+        sums, totals = {}, {}
+        for v in ob.data.vertices:
+            p = ob.matrix_world @ v.co
+            for g in v.groups:
+                if g.group in names and g.weight > 1e-6:
+                    name = names[g.group]
+                    sums[name] = sums.get(name, Vector()) + p * g.weight
+                    totals[name] = totals.get(name, 0.0) + g.weight
+        return {n: p / totals[n] for n, p in sums.items()}
+    target = centers(reference)
+    report = {}
+    for ob in meshes:
+        if ob == reference:
+            continue
+        source = centers(ob)
+        offsets = {g.index: target[g.name] - source[g.name] for g in ob.vertex_groups
+                   if g.name in target and g.name in source}
+        pivots = {g.index: source[g.name] for g in ob.vertex_groups if g.index in offsets}
+        inv = ob.matrix_world.inverted().to_3x3()
+        moved = 0
+        for v in ob.data.vertices:
+            weight = sum(g.weight for g in v.groups if g.group in offsets)
+            if weight <= 1e-6:
+                continue
+            point = ob.matrix_world @ v.co
+            delta = sum(((offsets[g.group] + (point-pivots[g.group]) * (scale-1.0)) * g.weight for g in v.groups
+                         if g.group in offsets), Vector()) / weight
+            delta = inv @ (delta * strength * min(weight, 1.0))
+            v.co += delta
+            if ob.data.shape_keys:
+                for key in ob.data.shape_keys.key_blocks:
+                    key.data[v.index].co += delta
+            moved += 1
+        report[ob.name] = {'regions': len(offsets), 'vertices': moved}
+    return report
+
+
+def seat_clothing_edges(meshes, reference, patterns, gap=0.003, iterations=80):
+    """Seat open edges in selected weighted regions; diffuse motion into panels."""
+    import bmesh
+    import fnmatch
+    import numpy as np
+    _, _, tree = _world_tris(reference)
+    report = {}
+    for ob in meshes:
+        if ob == reference:
+            continue
+        groups = {g.index for g in ob.vertex_groups
+                  if any(fnmatch.fnmatchcase(g.name.lower(), p.lower()) for p in patterns)}
+        weights = np.array([sum(g.weight for g in v.groups if g.group in groups)
+                            for v in ob.data.vertices])
+        bm = bmesh.new(); bm.from_mesh(ob.data); bm.verts.ensure_lookup_table()
+        boundary = [v.index for v in bm.verts if v.is_boundary and weights[v.index] > .05]
+        bm.free()
+        delta = np.zeros((len(ob.data.vertices), 3))
+        fixed = weights < .02
+        before = []
+        for i in boundary:
+            p = ob.matrix_world @ ob.data.vertices[i].co
+            q, normal, _, distance = tree.find_nearest(p)
+            if q is not None:
+                delta[i] = tuple(q + normal * gap - p)
+                fixed[i] = True
+                before.append(distance)
+        if not before:
+            report[ob.name] = {'edge_vertices': 0}
+            continue
+        delta = _smooth_field(delta, _edges(ob), fixed, iterations)
+        inv = ob.matrix_world.inverted().to_3x3()
+        local = [inv @ Vector(d) for d in delta]
+        for data in [ob.data.vertices] + ([k.data for k in ob.data.shape_keys.key_blocks] if ob.data.shape_keys else []):
+            for v, d in zip(data, local):
+                v.co += d
+        ob.data.update()
+        after = [tree.find_nearest(ob.matrix_world @ ob.data.vertices[i].co)[3] for i in boundary]
+        report[ob.name] = {'edge_vertices': len(before), 'max_gap_before': max(before),
+                           'max_gap_after': max(after), 'target_gap': gap}
+    return report
+
+
 def sync_shape_keys(body, meshes, create_missing=True, max_distance=0.0):
     """Make meshes (e.g. outfit pieces) follow the body's shape keys.
 
@@ -1302,6 +1393,50 @@ def transfer_to_body(meshes, body, base_body=None, reach=3.0, gap=0.08, smooth=8
     return result
 
 
+def conform_current_shape(meshes, body, reach, gap):
+    """Push clothing out of the evaluated skin at the current shape; keep sliders editable.
+
+    Run in the rest pose with only armature modifiers. The correction is applied
+    equally to every key, so subsequent slider changes still need inspection.
+    """
+    dg = bpy.context.evaluated_depsgraph_get()
+    copies = []
+    try:
+        for original in [body] + list(meshes):
+            if any(m.type != 'ARMATURE' and m.show_viewport for m in original.modifiers):
+                raise ValueError('Apply topology modifiers before conforming clothing')
+            arm = skinned_armature(original)
+            if arm and arm.data.pose_position != 'REST' and any(
+                    not p.matrix_basis.is_identity for p in arm.pose.bones):
+                raise ValueError('Use the rest pose before conforming clothing')
+            data = bpy.data.meshes.new_from_object(original.evaluated_get(dg), depsgraph=dg)
+            if len(data.vertices) != len(original.data.vertices):
+                bpy.data.meshes.remove(data)
+                raise ValueError('Evaluated topology differs from source')
+            copy = bpy.data.objects.new('__hs_clearance', data)
+            bpy.context.scene.collection.objects.link(copy)
+            copy.matrix_world = original.matrix_world.copy()
+            copies.append(copy)
+        reference = copies[0]
+        before = [[v.co.copy() for v in o.data.vertices] for o in copies[1:]]
+        transfer_to_body(copies[1:], reference, reach=reach, gap=gap, smooth=2)
+        result = {}
+        for original, copy, coords in zip(meshes, copies[1:], before):
+            delta = [v.co - p for v, p in zip(copy.data.vertices, coords)]
+            blocks = [k.data for k in original.data.shape_keys.key_blocks] if original.data.shape_keys else [original.data.vertices]
+            for block in blocks:
+                for v, d in zip(block, delta):
+                    v.co += d
+            original.data.update()
+            result[original.name] = sum(d.length > 1e-6 for d in delta)
+        return result
+    finally:
+        for copy in copies:
+            data = copy.data
+            bpy.data.objects.remove(copy, do_unlink=True)
+            bpy.data.meshes.remove(data)
+
+
 def is_see_through(ob):
     return any(s.material and material_images(s.material)["translucent"] for s in ob.material_slots)
 
@@ -1497,6 +1632,10 @@ def material_images(mat):
         alpha = bsdf.inputs.get("Alpha")
         if alpha and alpha.is_linked:
             out["alphatest"] = True
+        elif alpha:
+            out["opacity_constant"] = max(0.0, min(1.0, float(alpha.default_value)))
+            if out["opacity_constant"] < 1.0:
+                out["translucent"] = True
     if getattr(mat, "blend_method", "OPAQUE") == "BLEND" or getattr(mat, "surface_render_method", "") == "BLENDED":
         out["translucent"] = True
     if out["color"] is None:
@@ -1604,7 +1743,19 @@ def export_materials(objects, addon_content, hero, skin="swap", model_dir=None):
             flags += '\t"F_TRANSLUCENT"\t"1"\n'
         elif info["alphatest"]:
             flags += '\t"F_ALPHA_TEST"\t"1"\n'
-        if (info["translucent"] or info["alphatest"]) and info.get("color"):
+        if (info["translucent"] or info["alphatest"]) and "opacity_constant" in info:
+            alpha_path = os.path.join(folder, name + "_opacity.png")
+            opacity = bpy.data.images.new("__hs_constant_opacity", 2, 2, alpha=True)
+            try:
+                opacity.colorspace_settings.name = "Non-Color"
+                a = info["opacity_constant"]
+                opacity.pixels[:] = [a, a, a, 1.0] * 4
+                save_png(opacity, alpha_path)
+            finally:
+                bpy.data.images.remove(opacity)
+            files["opacity"] = f"{rel}/{name}_opacity.png"
+            flags += '\t"TextureTranslucency1"\t"' + files["opacity"] + '"\n'
+        elif (info["translucent"] or info["alphatest"]) and info.get("color"):
             # Deadlock pbr.vfx takes opacity from its own texture input; the
             # color PNG's alpha alone does not populate TextureTranslucency1.
             alpha_path = os.path.join(folder, name + "_opacity.png")

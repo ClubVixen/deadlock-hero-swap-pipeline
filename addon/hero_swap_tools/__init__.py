@@ -103,6 +103,17 @@ class HeroSwapSettings(bpy.types.PropertyGroup):
     eye_texture_dir: StringProperty(name="Eye Textures", subtype="DIR_PATH",
                                     description="Where the baked eye PNGs go (default: the export materials folder)")
     # outfit
+    shape_mesh: PointerProperty(name="Shape Mesh", type=bpy.types.Object, poll=is_mesh,
+                               description="Body or outfit to adjust independently; defaults to Body Mesh")
+    shape_filter: StringProperty(name="Shape Filter", default="breast",
+                                 description="Show matching source shape sliders; empty shows all")
+    alignment_reference: PointerProperty(name="Alignment Skin", type=bpy.types.Object, poll=is_mesh,
+                                        description="Complete skin mesh for matching weighted clothing regions; choose the arms for gloves")
+    alignment_patterns: StringProperty(name="Bone Patterns", default="*Hand*,*Palm*,*Finger*,*Forearm*",
+                                       description="Comma-separated bone-name patterns to align by weighted region centers")
+    alignment_strength: FloatProperty(name="Alignment Strength", default=1.0, min=0.0, max=1.0)
+    alignment_scale: FloatProperty(name="Region Scale", default=1.0, min=0.1, max=3.0,
+                                   description="Resize each selected weighted region around its center; 1 keeps its size")
     outfit_rig: PointerProperty(name="Outfit Rig", type=bpy.types.Object, poll=is_armature,
                                 description="The outfit's own armature, when it was made for a different body/rig")
     outfit_base_body: PointerProperty(name="Original Body", type=bpy.types.Object, poll=is_mesh,
@@ -436,6 +447,67 @@ class HEROSWAP_OT_apply_skin(bpy.types.Operator):
         pairs = [p.split("=", 1) for p in settings(context).skin_swaps.split(",") if "=" in p]
         n = core.apply_skin(selected_meshes(context), {a.strip(): b.strip() for a, b in pairs})
         self.report({"INFO"}, f"Swapped {n} material slot(s)")
+        return {"FINISHED"}
+
+
+class HEROSWAP_OT_align_regions(bpy.types.Operator):
+    """Align selected clothing regions to matching skin weights, then inspect the fit before weight transfer"""
+    bl_idname = "heroswap.align_regions"
+    bl_label = "Align Gloves / Weighted Regions"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        s = settings(context)
+        meshes = [o for o in selected_meshes(context) if o != s.alignment_reference]
+        if not s.alignment_reference or not meshes:
+            self.report({"ERROR"}, "Choose Alignment Skin and select the clothing meshes")
+            return {"CANCELLED"}
+        patterns = [p.strip() for p in s.alignment_patterns.split(',') if p.strip()]
+        result = core.align_weighted_regions(meshes, s.alignment_reference, patterns, s.alignment_strength, s.alignment_scale)
+        moved = sum(r['vertices'] for r in result.values())
+        self.report({"INFO"}, f"Aligned {moved} vertices. Inspect fingers and transfer skin weights after fitting")
+        return {"FINISHED"}
+
+
+class HEROSWAP_OT_seat_edges(bpy.types.Operator):
+    """Bring open clothing edges in the chosen bone regions against Alignment Skin and blend the adjustment into the panels"""
+    bl_idname = "heroswap.seat_edges"
+    bl_label = "Seat Clothing Edges Against Skin"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        s = settings(context)
+        meshes = [o for o in selected_meshes(context) if o != s.alignment_reference]
+        if not s.alignment_reference or not meshes:
+            self.report({"ERROR"}, "Choose Alignment Skin and select the clothing meshes")
+            return {"CANCELLED"}
+        patterns = [p.strip() for p in s.alignment_patterns.split(',') if p.strip()]
+        gap = s.outfit_gap or max(s.alignment_reference.dimensions) * .002
+        result = core.seat_clothing_edges(meshes, s.alignment_reference, patterns, gap)
+        self.report({"INFO"}, f"Seated {sum(r['edge_vertices'] for r in result.values())} edge vertices; inspect front, top and posed views")
+        return {"FINISHED"}
+
+
+class HEROSWAP_OT_conform_shape(bpy.types.Operator):
+    """Push selected clothing out of the current body shape in rest pose, preserving editable shape keys"""
+    bl_idname = "heroswap.conform_shape"
+    bl_label = "Conform Clothing to Current Shape"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        s = settings(context)
+        meshes = [o for o in selected_meshes(context) if o != s.body_mesh]
+        if not s.body_mesh or not meshes:
+            self.report({"ERROR"}, "Choose New Body and select the clothing")
+            return {"CANCELLED"}
+        h = max(s.body_mesh.dimensions)
+        try:
+            result = core.conform_current_shape(meshes, s.body_mesh,
+                s.outfit_reach or .1 * h, s.outfit_gap or .003 * h)
+        except ValueError as e:
+            self.report({"ERROR"}, str(e))
+            return {"CANCELLED"}
+        self.report({"INFO"}, f"Adjusted {sum(result.values())} clothing vertices; inspect the fit and pose")
         return {"FINISHED"}
 
 
@@ -883,7 +955,26 @@ class HEROSWAP_PT_outfit(_Step, bpy.types.Panel):
         row.prop(s, "create_missing", text="Create Missing")
         row.prop(s, "max_distance", text="Max")
         button(col, HEROSWAP_OT_sync_shape_keys, icon="SHAPEKEY_DATA")
-
+        button(col, HEROSWAP_OT_conform_shape, icon="MOD_SHRINKWRAP")
+        box = col.box()
+        box.label(text="Adjust body or outfit independently:")
+        box.prop(s, "shape_mesh")
+        box.prop(s, "shape_filter")
+        ob = s.shape_mesh or s.body_mesh
+        if ob and ob.data.shape_keys:
+            for key in ob.data.shape_keys.key_blocks[1:]:
+                if s.shape_filter.lower() in key.name.lower():
+                    box.prop(key, "value", text=key.name)
+        else:
+            box.label(text="Use a pre-fit mesh with shape keys")
+        box = col.box()
+        box.prop(s, "alignment_reference")
+        box.prop(s, "alignment_patterns")
+        box.prop(s, "alignment_strength")
+        box.prop(s, "alignment_scale")
+        button(box, HEROSWAP_OT_align_regions, icon="MOD_SHRINKWRAP")
+        box.prop(s, "outfit_gap", text="Edge Clearance")
+        button(box, HEROSWAP_OT_seat_edges, icon="MOD_SHRINKWRAP")
 
 
 class HEROSWAP_PT_bonemap(_Step, bpy.types.Panel):
@@ -948,7 +1039,7 @@ class HEROSWAP_PT_export(_Step, bpy.types.Panel):
 classes = (HeroSwapPrefs, BoneMapRow, HeroSwapSettings,
            HEROSWAP_OT_refresh_heroes, HEROSWAP_OT_import_hero,
            HEROSWAP_OT_cleanup, HEROSWAP_OT_load_textures, HEROSWAP_OT_delete_materials, HEROSWAP_OT_bake_eyes,
-           HEROSWAP_OT_bonemerge, HEROSWAP_OT_fit_outfit, HEROSWAP_OT_hide_skin, HEROSWAP_OT_apply_skin, HEROSWAP_OT_sync_shape_keys,
+           HEROSWAP_OT_bonemerge, HEROSWAP_OT_fit_outfit, HEROSWAP_OT_hide_skin, HEROSWAP_OT_apply_skin, HEROSWAP_OT_sync_shape_keys, HEROSWAP_OT_align_regions, HEROSWAP_OT_seat_edges, HEROSWAP_OT_conform_shape,
            HEROSWAP_OT_autodetect, HEROSWAP_OT_save_bonemap, HEROSWAP_UL_rows,
            HEROSWAP_OT_fit, HEROSWAP_OT_aim_tail, HEROSWAP_OT_flip_tail, HEROSWAP_OT_write_jiggle,
            HEROSWAP_OT_export, HEROSWAP_OT_build,
