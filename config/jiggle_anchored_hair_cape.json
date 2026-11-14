@@ -1,0 +1,162 @@
+{
+  "_comment": "Character-specific starting point: fixed scalp/ponytail attachment and first cape segments. Remaining chains use restrained angular physics. Validate in-game; these values are not universal.",
+  "keep_patterns": [
+    "hairback*",
+    "jiggle_hair*",
+    "*hair*",
+    "*ponytail*",
+    "tailbase",
+    "*tail*",
+    "*breast*",
+    "*buttock*",
+    "*butt",
+    "*butt?",
+    "*butt.?",
+    "*butt_?",
+    "*butt2*",
+    "*_ear_*",
+    "ear_*",
+    "*Skirt_301*"
+  ],
+  "presets": [
+    {
+      "pattern": "*Hair_301_root",
+      "skip": true
+    },
+    {
+      "pattern": "*Hair_301_M01",
+      "skip": true
+    },
+    {
+      "pattern": "*Skirt_301_A01",
+      "skip": true
+    },
+    {
+      "pattern": "*Breast*end*",
+      "skip": true
+    },
+    {
+      "pattern": "*Hair_301*",
+      "fields": {
+        "jiggle_type": 1,
+        "has_base_spring": 0,
+        "tip_mass": 8,
+        "yaw_stiffness": 250,
+        "pitch_stiffness": 250,
+        "yaw_damping": 12,
+        "pitch_damping": 12,
+        "has_angle_constraint": 1,
+        "angle_limit": 8,
+        "along_stiffness": 100,
+        "along_damping": 8
+      }
+    },
+    {
+      "pattern": "*Skirt_301*",
+      "fields": {
+        "jiggle_type": 1,
+        "has_base_spring": 0,
+        "tip_mass": 12,
+        "yaw_stiffness": 220,
+        "pitch_stiffness": 220,
+        "yaw_damping": 12,
+        "pitch_damping": 12,
+        "has_angle_constraint": 1,
+        "angle_limit": 10,
+        "along_stiffness": 100,
+        "along_damping": 8
+      }
+    },
+    {
+      "pattern": "TailBase",
+      "skip": true
+    },
+    {
+      "pattern": "*Breast*",
+      "fields": {
+        "jiggle_type": 2,
+        "has_base_spring": 1,
+        "base_mass": 5,
+        "base_stiffness": 70,
+        "base_damping": 4,
+        "base_left_min": -0.7,
+        "base_left_max": 0.7,
+        "base_left_friction": 0,
+        "base_up_min": -0.9,
+        "base_up_max": 0.9,
+        "base_up_friction": 0,
+        "base_forward_min": -0.5,
+        "base_forward_max": 0.5,
+        "base_forward_friction": 0
+      }
+    },
+    {
+      "pattern": "*Butt*",
+      "fields": {
+        "jiggle_type": 2,
+        "has_base_spring": 1,
+        "base_mass": 5,
+        "base_stiffness": 90,
+        "base_damping": 5,
+        "base_left_min": -0.5,
+        "base_left_max": 0.5,
+        "base_left_friction": 0,
+        "base_up_min": -0.7,
+        "base_up_max": 0.7,
+        "base_up_friction": 0,
+        "base_forward_min": -0.5,
+        "base_forward_max": 0.5,
+        "base_forward_friction": 0
+      }
+    },
+    {
+      "pattern": "*ail*",
+      "fields": {
+        "jiggle_type": 1,
+        "tip_mass": 160,
+        "yaw_stiffness": 200,
+        "yaw_damping": 5,
+        "pitch_stiffness": 200,
+        "pitch_damping": 5,
+        "has_yaw_constraint": 1,
+        "min_yaw": -120,
+        "max_yaw": 120,
+        "has_pitch_constraint": 1,
+        "min_pitch": -50,
+        "max_pitch": 50,
+        "along_stiffness": 100,
+        "along_damping": 0
+      }
+    },
+    {
+      "pattern": "*ear*",
+      "fields": {
+        "jiggle_type": 1,
+        "tip_mass": 20,
+        "yaw_stiffness": 250,
+        "yaw_damping": 6,
+        "pitch_stiffness": 250,
+        "pitch_damping": 6,
+        "has_angle_constraint": 1,
+        "angle_limit": 20,
+        "along_stiffness": 100,
+        "along_damping": 0
+      }
+    },
+    {
+      "pattern": "*",
+      "fields": {
+        "jiggle_type": 1,
+        "tip_mass": 40,
+        "yaw_stiffness": 150,
+        "yaw_damping": 5,
+        "pitch_stiffness": 150,
+        "pitch_damping": 5,
+        "has_angle_constraint": 1,
+        "angle_limit": 35,
+        "along_stiffness": 100,
+        "along_damping": 0
+      }
+    }
+  ]
+}

@@ -184,6 +184,13 @@ For this example the root is `CV_TailBase`, a stable attachment rather than an e
 physics spring. The export retains 15 jiggle bones: two breast, two buttock, four hair
 and seven tail. Review the preset's bone names for each new character.
 
+### Choosing jiggle bones and motion strength
+
+Follow the [illustrated jiggle selection and tuning guide](docs/jiggle-bones.md) for
+fixed anchors, cape/hair selection, refresh after fitting, and stiffness, damping
+and angle limits. It uses the actual sidebar controls and explains which settings
+require a custom preset.
+
 ### Heels and floating weapons
 
 For rigid heels, enable the new **Preserve Heeled Shoes (Experimental)** option

@@ -6,7 +6,7 @@ import bpy
 from bpy.props import (BoolProperty, CollectionProperty, EnumProperty, FloatProperty, IntProperty,
                        PointerProperty, StringProperty)
 
-from . import build, core, rigmap
+from . import build, core, rigmap, jiggle
 
 bl_info = {
     "name": "Hero Swap Tools",
@@ -156,6 +156,11 @@ class HeroSwapSettings(bpy.types.PropertyGroup):
                               description="Keep hair/tail/chest/butt/ear chains as bones on the hero skeleton so they can get physics")
     jiggle_presets: StringProperty(name="Jiggle Presets", subtype="FILE_PATH", default=DEFAULT_JIGGLE,
                                    description="Bundled jiggle_presets.json is the default. An external model-specific preset replaces it; ReVamped is optional")
+    jiggle_include: StringProperty(name="Also Include", default="", description="Comma-separated bone patterns added to preset selection, e.g. *Skirt*, *Cape*. Only retained bones can be selected")
+    jiggle_exclude: StringProperty(name="Fixed / Exclude", default="", description="Comma-separated fixed anchor patterns; excluded bones remain in the rig but receive no jiggle")
+    jiggle_stiffness: FloatProperty(name="Stiffness Multiplier", default=1.0, min=0.1, max=3.0, description="Higher resists bending; scales preset stiffness on export")
+    jiggle_damping: FloatProperty(name="Damping Multiplier", default=1.0, min=0.1, max=3.0, description="Higher reduces oscillation; scales preset damping on export")
+    jiggle_angle: FloatProperty(name="Angle Limit Multiplier", default=1.0, min=0.0, max=2.0, description="Lower permits less angular travel; does not scale base-spring translation")
     tail_root: StringProperty(name="Tail Root", default="",
                               description="First bone of a chain that came out sideways after the fit (filled in by the fit)")
     # export + build
@@ -719,11 +724,47 @@ class HEROSWAP_OT_flip_tail(bpy.types.Operator):
         return {"FINISHED"}
 
 
-def jiggle_text(s):
-    names = list(s.hero_rig.get("hero_swap_jiggle_bones", [])) if s.hero_rig else []
+def refresh_jiggle(s):
+    if not s.hero_rig:
+        return [], []
+    config = core.load_bonemap(s.jiggle_presets)
+    # CV_ identifies the replacement deformation rig. Never accidentally select
+    # native hero hair merely because its name matches a broad preset pattern.
+    names = [b.name for b in s.hero_rig.data.bones if b.name.startswith('CV_')]
     if not names:
+        names = list(s.hero_rig.get('hero_swap_jiggle_bones', []))
+    names = jiggle.select(names, config, s.jiggle_include, s.jiggle_exclude) if s.keep_jiggle else []
+    rules = jiggle.rules(names, config, s.jiggle_stiffness, s.jiggle_damping, s.jiggle_angle)
+    s.hero_rig['hero_swap_jiggle_bones'] = names
+    return names, rules
+
+
+def jiggle_text(s):
+    names, rules = refresh_jiggle(s)
+    if not rules:
         return None, 0
-    return core.jiggle_vmdl_block(names, core.load_bonemap(s.jiggle_presets)["presets"])
+    return core.jiggle_vmdl_block(names, rules)
+
+
+class HEROSWAP_OT_refresh_jiggle(bpy.types.Operator):
+    """Re-read preset and selection without refitting; write an inspectable list of active bones"""
+    bl_idname = "heroswap.refresh_jiggle"
+    bl_label = "Refresh Jiggle Selection"
+
+    def execute(self, context):
+        s = settings(context)
+        if not s.hero_rig:
+            self.report({'ERROR'}, 'Choose the fitted Hero Skeleton first')
+            return {'CANCELLED'}
+        try:
+            names, rules = refresh_jiggle(s)
+        except (OSError, ValueError, KeyError) as e:
+            self.report({'ERROR'}, str(e))
+            return {'CANCELLED'}
+        block = bpy.data.texts.get('jiggle_selection.txt') or bpy.data.texts.new('jiggle_selection.txt')
+        block.from_string('Active physics bones (anchors excluded):\n' + '\n'.join(r['pattern'] for r in rules))
+        self.report({'INFO'}, f'{len(rules)} active physics bones; see jiggle_selection.txt')
+        return {'FINISHED'}
 
 
 class HEROSWAP_OT_write_jiggle(bpy.types.Operator):
@@ -1011,6 +1052,12 @@ class HEROSWAP_PT_fit(_Step, bpy.types.Panel):
         if s.keep_jiggle:
             col.prop(s, "jiggle_presets", text="Presets")
             col.label(text="Bundled default; ReVamped override is optional", icon="INFO")
+            col.prop(s, "jiggle_include")
+            col.prop(s, "jiggle_exclude")
+            col.prop(s, "jiggle_stiffness")
+            col.prop(s, "jiggle_damping")
+            col.prop(s, "jiggle_angle")
+            button(col, HEROSWAP_OT_refresh_jiggle, icon="FILE_REFRESH")
         button(col, HEROSWAP_OT_fit, icon="ARMATURE_DATA")
         col.separator()
         col.prop(s, "tail_root")
@@ -1046,7 +1093,7 @@ classes = (HeroSwapPrefs, BoneMapRow, HeroSwapSettings,
            HEROSWAP_OT_cleanup, HEROSWAP_OT_load_textures, HEROSWAP_OT_delete_materials, HEROSWAP_OT_bake_eyes,
            HEROSWAP_OT_bonemerge, HEROSWAP_OT_fit_outfit, HEROSWAP_OT_hide_skin, HEROSWAP_OT_apply_skin, HEROSWAP_OT_sync_shape_keys, HEROSWAP_OT_align_regions, HEROSWAP_OT_seat_edges, HEROSWAP_OT_conform_shape,
            HEROSWAP_OT_autodetect, HEROSWAP_OT_save_bonemap, HEROSWAP_UL_rows,
-           HEROSWAP_OT_fit, HEROSWAP_OT_aim_tail, HEROSWAP_OT_flip_tail, HEROSWAP_OT_write_jiggle,
+           HEROSWAP_OT_fit, HEROSWAP_OT_aim_tail, HEROSWAP_OT_flip_tail, HEROSWAP_OT_refresh_jiggle, HEROSWAP_OT_write_jiggle,
            HEROSWAP_OT_export, HEROSWAP_OT_build,
            HEROSWAP_PT_main, HEROSWAP_PT_hero, HEROSWAP_PT_character, HEROSWAP_PT_outfit, HEROSWAP_PT_bonemap,
            HEROSWAP_PT_fit, HEROSWAP_PT_export)
