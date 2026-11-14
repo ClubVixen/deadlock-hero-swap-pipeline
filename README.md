@@ -56,6 +56,8 @@ In the 3D Viewport, press **N**, open **Hero Swap**, and click **Tool Paths...**
 Set the Deadlock folder, Reduced CSDK folder, CS2 folder
 (`...\Counter-Strike Global Offensive`), `Source2Viewer-CLI.exe`, and a work folder.
 The **1 2 3 4 5 6 All** row selects the workflow sections.
+See [exact path and skeleton setup](docs/heels-and-setup.md#game-paths-and-skeletons)
+for which directory each field expects.
 
 ## Step 1: Hero
 
@@ -166,9 +168,9 @@ to compensate for a poor spine mapping or a hero with different proportions.
 Start from the clean pre-fit scene with a fresh hero skeleton.
 
 1. Enable **Preserve Source Proportions (Experimental)** and **Keep Jiggle Bones**.
-2. Choose a jiggle preset appropriate to the model. The
-   [ReVamped single-spring preset](config/jiggle_revamped_single_springs.json) used here
-   selects one breast and buttock spring per side, plus hair and tail chains.
+2. Keep the bundled `jiggle_presets.json` for default physics. The optional
+   [ReVamped preset](config/jiggle_revamped_single_springs.json) replaces it for
+   compatible rigs; it is not required. See [preset selection](docs/heels-and-setup.md#jiggle-presets).
 3. Click **Fit Character to Hero** once.
 4. Inspect the waist, shoulders, hands and feet. Repeat clothing clearance checks in
    the hero rest pose using Reach and Gap scaled to the new character size.
@@ -181,6 +183,18 @@ Start from the clean pre-fit scene with a fresh hero skeleton.
 For this example the root is `CV_TailBase`, a stable attachment rather than an extra
 physics spring. The export retains 15 jiggle bones: two breast, two buttock, four hair
 and seven tail. Review the preset's bone names for each new character.
+
+### Heels and floating weapons
+
+For rigid heels, enable the new **Preserve Heeled Shoes (Experimental)** option
+under **Preserve Source Proportions**, before fitting a clean source mesh.
+See [heel fitting and recovery steps](docs/heels-and-setup.md#heels).
+An already distorted fitted mesh must be restored from the pre-fit checkpoint.
+
+For floating guns, keep the body proportions and correct the visual weapon's
+attachment. Follow the [Miruko/Abrams weapon correction steps](docs/weapon-grip.md).
+This advanced DMX/ModelDoc workflow is not yet a sidebar button; idle contact was
+verified, but firing/reload contact remains unverified.
 
 ### Why this avoids the compressed Miruko torso
 

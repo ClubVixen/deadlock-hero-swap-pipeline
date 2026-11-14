@@ -11,7 +11,7 @@ from . import build, core, rigmap
 bl_info = {
     "name": "Hero Swap Tools",
     "author": "ClubVixen",
-    "version": (0, 2, 0),
+    "version": (0, 3, 0),
     "blender": (4, 2, 0),
     "location": "3D Viewport > Sidebar > Hero Swap",
     "description": "Fit any SFM or Blender character (and outfits made for other bodies) onto a Deadlock hero, export ModelDoc DMX and build the mod locally",
@@ -146,6 +146,8 @@ class HeroSwapSettings(bpy.types.PropertyGroup):
     # fit
     preserve_proportions: BoolProperty(name="Preserve Source Proportions (Experimental)", default=False,
                                       description="Keep source bone lengths on a separate deformation rig driven by hero rotations. Requires in-game validation of contacts and physics")
+    preserve_heels: BoolProperty(name="Preserve Heeled Shoes (Experimental)", default=False,
+                                description="Keep the source foot/toe shape rigid and drive it from the hero ankle. Use a clean pre-fit mesh; disables independent toe bending")
     preserve_torso: BoolProperty(name="Preserve Torso Proportions", default=False,
                                 description="Experimental: keep the pelvis-to-neck shape with one rigid offset. Align limbs to the hero; does not retarget the game's animation clips")
     keep_head: BoolProperty(name="Keep Head Proportions", default=True,
@@ -153,7 +155,7 @@ class HeroSwapSettings(bpy.types.PropertyGroup):
     keep_jiggle: BoolProperty(name="Keep Jiggle Bones", default=True,
                               description="Keep hair/tail/chest/butt/ear chains as bones on the hero skeleton so they can get physics")
     jiggle_presets: StringProperty(name="Jiggle Presets", subtype="FILE_PATH", default=DEFAULT_JIGGLE,
-                                   description="JSON with the bone patterns to keep and their ModelDoc jiggle settings")
+                                   description="Bundled jiggle_presets.json is the default. An external model-specific preset replaces it; ReVamped is optional")
     tail_root: StringProperty(name="Tail Root", default="",
                               description="First bone of a chain that came out sideways after the fit (filled in by the fit)")
     # export + build
@@ -656,12 +658,12 @@ class HEROSWAP_OT_fit(bpy.types.Operator):
         try:
             if s.preserve_proportions:
                 from . import proportions
-                report = proportions.fit(s.character_rig, meshes, s.hero_rig, bm)
+                report = proportions.fit(s.character_rig, meshes, s.hero_rig, bm, preserve_heels=s.preserve_heels)
                 yaw, scale = 0, report['scale']
             else:
                 yaw, scale = core.fit_to_hero(s.character_rig, meshes, s.hero_rig, bm, keep_patterns=keep, keep_head=s.keep_head,
                                             preserve_torso=s.preserve_torso)
-        except KeyError as e:
+        except (KeyError, ValueError) as e:
             self.report({"ERROR"}, f"Bone not found: {e}. Check the bone map matches both rigs")
             return {"CANCELLED"}
         added = [b.name for b in s.hero_rig.data.bones if b.name not in before]
@@ -1000,12 +1002,15 @@ class HEROSWAP_PT_fit(_Step, bpy.types.Panel):
         s = settings(context)
         col = self.layout.column()
         col.prop(s, "preserve_proportions")
+        if s.preserve_proportions:
+            col.prop(s, "preserve_heels")
         if not s.preserve_proportions:
             col.prop(s, "preserve_torso")
         col.prop(s, "keep_head")
         col.prop(s, "keep_jiggle")
         if s.keep_jiggle:
             col.prop(s, "jiggle_presets", text="Presets")
+            col.label(text="Bundled default; ReVamped override is optional", icon="INFO")
         button(col, HEROSWAP_OT_fit, icon="ARMATURE_DATA")
         col.separator()
         col.prop(s, "tail_root")

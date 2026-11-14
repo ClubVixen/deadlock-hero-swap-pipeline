@@ -12,7 +12,7 @@ from mathutils.kdtree import KDTree
 from . import core, kv3
 
 
-def fit(src, meshes, hero, bm, prefix='CV_'):
+def fit(src, meshes, hero, bm, prefix='CV_', preserve_heels=False):
     bones=src.data.bones
     h={b.name:src.matrix_world@b.head_local for b in bones}
     hp={b.name:hero.matrix_world@b.head_local for b in hero.data.bones}
@@ -48,6 +48,27 @@ def fit(src, meshes, hero, bm, prefix='CV_'):
     h={n:T@v for n,v in h.items()}
     placement=Matrix.Translation(hp[dp]-h[sp])
     groups={a:b for a,b in bm['groups'].items() if a in bones and b in hero.data.bones}
+    # Foot roots come from the explicit map, never toe-tip directions. Advanced
+    # maps can supply heel_feet when target bones use nonstandard names.
+    heel_roots = set()
+    heel_owner = {}
+    if preserve_heels:
+        heel_roots = set(bm.get('heel_feet', [])) or {
+            n for n, target in groups.items()
+            if re.search(r'(^|_)(ankle|foot)(_|$)', target, re.I)}
+        if not heel_roots or any(n not in groups for n in heel_roots):
+            raise ValueError('Heeled shoes need mapped foot roots; set heel_feet in the bone map')
+        for b in bones:
+            ancestor = b
+            while ancestor:
+                if ancestor.name in heel_roots:
+                    heel_owner[b.name] = ancestor.name
+                    break
+                ancestor = ancestor.parent
+        # Toe/helper bones inherit the ankle's motion instead of independent
+        # toe rotations. Their original relative transforms remain intact.
+        groups = {n: target for n, target in groups.items()
+                  if n not in heel_owner or n in heel_roots}
     parents={b.name:b.parent.name if b.parent else None for b in bones}
     rotations={}
     for seg in bm['segments']:
@@ -82,6 +103,14 @@ def fit(src, meshes, hero, bm, prefix='CV_'):
         visiting.add(n)
         P=transform(resolved[n]) if resolved[n] else placement
         R=rotations.get(n)
+        if n in heel_roots:
+            maps[n] = Matrix.Translation(P @ h[n] - h[n])
+            visiting.remove(n)
+            return maps[n]
+        if n in heel_owner:
+            maps[n] = transform(heel_owner[n]).copy()
+            visiting.remove(n)
+            return maps[n]
         maps[n]=Matrix.Translation(P@h[n])@R@Matrix.Translation(-h[n]) if R else P.copy()
         visiting.remove(n)
         return maps[n]
@@ -129,4 +158,4 @@ def fit(src, meshes, hero, bm, prefix='CV_'):
             {'_class':kv3.q('AnimConstraintBoneInput'),'parent_bone':kv3.q(groups[n]),'weight':1.0,'relative_origin':[kv3.Raw('0')]*3,'relative_angles':[kv3.Raw('0')]*3}]})
     hero['proportion_constraints']=kv3.dumps('',{'_class':kv3.q('AnimConstraintList'),'children':constraints})
     hero['proportion_source_map']={names[n]:groups[n] for n in ordered if n in groups}
-    return {'scale':scale,'added_bones':len(wanted),'orientation_constraints':len(constraints),'names':names,'repaired_unweighted_vertices':repaired,'status':'experimental; requires runtime validation'}
+    return {'scale':scale,'added_bones':len(wanted),'orientation_constraints':len(constraints),'names':names,'repaired_unweighted_vertices':repaired,'heel_roots':sorted(heel_roots),'rigid_shoe_bones':sorted(heel_owner),'status':'experimental; requires runtime validation'}
