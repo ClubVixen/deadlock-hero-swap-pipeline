@@ -47,10 +47,6 @@ Standard target `ankle_L/R` and `foot_L/R` mappings are detected. For nonstandar
 names, add `"heel_feet": ["source_left_foot", "source_right_foot"]` to the bone-map
 JSON using the actual source foot-root names. Both roots must be mapped.
 
-Validation includes a Blender regression with a deliberately reversed toe helper,
-measured rigid-sole distances, ankle rotation and the option disabled. This is not
-an in-game gait or final character visual acceptance test.
-
 ## Jiggle presets
 
 **The bundled `jiggle_presets.json` is the default. ReVamped is optional.**
