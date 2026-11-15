@@ -2,17 +2,14 @@
 
 Fit a character and outfit to a Deadlock hero, preserve the character's proportions,
 set up secondary motion, and compile a local mod from Blender's **Hero Swap** sidebar.
-This guide follows the corrected Miruko → Abrams and ReVamped Trixie → Sinclair builds.
-The same workflow can be adapted to other humanoid models; bone maps, clothing fit,
-and animation contacts still need checking for each character.
+This guide shows the process used to swap Miruko → Abrams and ReVamped Trixie → Sinclair builds.
+The same workflow can be adapted to other humanoid models; 
+Characters that are drastically different, like Baba, have not been tested. They will need specialized swaps
 
 ![Trixie on Sinclair: compiled outfit and transparency in Deadlock](docs/images/cheerleader_runtime_front.png)
 
-*Actual Deadlock hideout capture. The outer top and skirt use 45% opacity; the bra remains opaque.*
+*Actual Deadlock in-game capture. The outer top and skirt use 45% opacity; the bra remains opaque.*
 
-The screenshots show the real Blender controls and loaded game results. Older import
-and bone-map screenshots have a red button highlight and enlarged sidebar; newer
-screenshots show the interface directly. Full button names are repeated below.
 
 ## Start here
 
@@ -21,9 +18,6 @@ screenshots show the interface directly. Full button names are repeated below.
 3. [Fit the outfit](#step-3-outfit-optional), then optionally [test transparency](#optional-semi-transparent-clothing).
 4. [Check the bone map](#step-4-bone-map), then [preserve proportions and correct the tail](#step-5-fit-proportions-and-jiggle-bones).
 5. [Export, install and inspect in-game](#step-6-export-build-and-install).
-
-Keep three separate files: an untouched source scene, an editable fitted scene, and
-an export copy. Third-party models and compiled VPKs are not included in this repository.
 
 ## 0. One-time setup
 
@@ -67,8 +61,7 @@ with the original mesh hidden as a reference.
 
 ![Hero selection and Import Hero Skeleton button](docs/images/a1_import_hero.png)
 
-Display and internal names can differ: Sinclair uses `magician`, for example. Check
-the replacement mesh list instead of assuming every mesh belongs to the body. Keep
+Display and internal names can differ: Sinclair uses `magician`, for example. Keep
 weapons and ability props unless you are deliberately replacing those too.
 
 ## Step 2: Character
@@ -78,7 +71,7 @@ copy. For compiled `.mdl` assets, use SourceIO; for DMX/SMD, use Source Tools. C
 texture paths and pack or relink missing images before continuing.
 
 In **2 / Character**, set **Rig** to the character's armature. Choose the body shape,
-outfit variants and feet you intend to use before fitting. Exclude unwanted alternatives
+outfit variants, and feet (in the case of something like the Revamped Ponies) you intend to use before fitting. Exclude unwanted alternatives
 from rendering/export as well as the viewport.
 
 ![Character rig and cleanup controls](docs/images/a2_cleanup.png)
@@ -108,6 +101,8 @@ In **3 / Outfit**, set **New Body** to the skin mesh. **Rig** is an armature;
 5. In the rest pose, set **Reach** and **Gap**, then click **Conform Clothing to Current Shape**.
 
 ![Actual shape matching, bone merging and clothing-clearance controls](docs/images/cheerleader_fit_buttons.png)
+This is mostly for ReVamped Ponies, or any model sharing the body. It can also be applied to Fo4 mods.
+Fo4 has the same body for multiple models, including ponies in the CaN mod.
 
 **Conform Clothing to Current Shape** uses the evaluated body and clothing surfaces.
 It moves intersecting clothing outward and applies the correction across its shape
@@ -115,42 +110,33 @@ keys without reshaping the body. Apply topology-changing modifiers first. Set Re
 and Gap relative to the model's scene scale; the example initially used `0.08` and
 `0.003` in source space. A narrow field may round the displayed Gap to `0.00`.
 
-This operation does not tighten every loose panel or create missing crotch coverage.
-Compare the actual clothing-to-body distance, inspect openings and garment layers,
-and correct remaining excess space or missing geometry manually. Repeat the check
-after changing shape values and after fitting to the hero.
+This won't always be 100% but should get you 80 to 90% there. Inspect the gaps between the model and their outfits.
 
 ### Outfit made for a different body or skeleton
 
-1. Import the body the outfit was authored for.
+1. Import the body the outfit was made for.
 2. If needed, select that reference body, enable **Merge onto Outfit Rig instead**,
    and bone-merge it onto the outfit rig.
 3. Set **Outfit Rig**, **Its Body**, and **New Body** to the outfit armature, its
    original reference body, and your character's skin mesh respectively.
 4. Click **Fit Outfit to Character**, then inspect the result from several angles.
 
-Matching bone names alone does not establish compatible rest positions. Use the
-reference-body workflow for different rigs and keep a checkpoint before transferring.
-For opaque garments, **Delete Skin Under Outfit** can remove covered skin, but inspect
-the result carefully and retain skin beneath openings or translucent material.
 
-## Optional: semi-transparent clothing
+## Optional: transparency settings
 
-1. Select the outer garment and open **Material Properties** using the material sphere icon.
+1. Select the outfit and open **Material Properties** using the material sphere icon.
 2. Make a separate material copy if the same material is also used by an opaque underlayer.
-3. In the Principled BSDF **Surface**, set the unlinked **Alpha** slider to `0.45`.
-4. In Blender 5.2 material **Settings / Surface**, choose **Render Method: Blended**.
-5. Use Material Preview or Rendered view, and repeat for the appropriate material slots.
+3. In the Principled BSDF **Surface**, set the unlinked **Alpha** slider to `0.45` for a great  transparent effect.
+4. In Blender 5 material **Settings / Surface**, choose **Render Method: Blended**.
+5. Use Material Preview or Rendered view, and repeat for each material slot.
 
 ![Material Properties, material slots and Alpha control](docs/images/cheerleader_material_alpha.png)
 
-`1.0` is opaque; `0.0` is invisible. The example keeps the bra opaque and makes the
-outer top/skirt 45% opaque. Keep the skin underneath transparent fabric.
+`1.0` is opaque; `0.0` is invisible. The example with Trixie keeps the bra opaque and makes the
+outer top/skirt 45% opaque.
 
 The exporter writes a separate opacity texture into `TextureTranslucency1` and enables
-`F_TRANSLUCENT`. An RGBA color texture alone does not supply this shader input.
-Arbitrary procedural Alpha networks are not baked by this workflow. Check layered
-transparency in-game: Blender preview alone cannot establish the final sorting or look.
+`F_TRANSLUCENT`. 
 
 ## Step 4: Bone map
 
@@ -160,8 +146,6 @@ Fix incorrect rows with the bone picker, then click **Save Bone Map**.
 
 ![Bone map controls and mapped character joints](docs/images/a4_bonemap.png)
 
-A successful auto-detection is a starting point. In particular, do not squash a torso
-to compensate for a poor spine mapping or a hero with different proportions.
 
 ## Step 5: Fit, proportions and jiggle bones
 
@@ -172,24 +156,21 @@ Start from the clean pre-fit scene with a fresh hero skeleton.
    [ReVamped preset](config/jiggle_revamped_single_springs.json) replaces it for
    compatible rigs; it is not required. See [preset selection](docs/heels-and-setup.md#jiggle-presets).
 3. Click **Fit Character to Hero** once.
-4. Inspect the waist, shoulders, hands and feet. Repeat clothing clearance checks in
+4. Inspect the waist, shoulders, hands, and feet. Repeat clothing clearance checks in
    the hero rest pose using Reach and Gap scaled to the new character size.
-5. For a tail, set **Tail Root** to the whole chain's root, then click **Point Backward**.
-   Inspect side and rear views. Use **Flip** only if the curl needs reversing.
-6. Save a separate editable fitted `.blend`.
+5. Save a separate editable fitted `.blend`.
 
 ![Actual fit and jiggle settings, Tail Root and tail correction controls](docs/images/cheerleader_tail_controls.png)
 
-For this example the root is `CV_TailBase`, a stable attachment rather than an extra
-physics spring. The export retains 15 jiggle bones: two breast, two buttock, four hair
+For this example, the root is `CV_TailBase`, a stable attachment rather than an extra
+physics spring. The export retains 15 jiggle bones: two breast, two butt bones, four hair
 and seven tail. Review the preset's bone names for each new character.
 
 ### Choosing jiggle bones and motion strength
 
 Follow the [illustrated jiggle selection and tuning guide](docs/jiggle-bones.md) for
 fixed anchors, cape/hair selection, refresh after fitting, and stiffness, damping
-and angle limits. It uses the actual sidebar controls and explains which settings
-require a custom preset.
+and angle limits. 
 
 ### Heels and floating weapons
 
@@ -200,8 +181,7 @@ An already distorted fitted mesh must be restored from the pre-fit checkpoint.
 
 For floating guns, keep the body proportions and correct the visual weapon's
 attachment. Follow the [Miruko/Abrams weapon correction steps](docs/weapon-grip.md).
-This advanced DMX/ModelDoc workflow is not yet a sidebar button; idle contact was
-verified, but firing/reload contact remains unverified.
+This DMX/ModelDoc workflow is not yet automated
 
 ### Why this avoids the compressed Miruko torso
 
@@ -209,15 +189,14 @@ The original fit moves source joints onto the hero's joints, which can shorten a
 character's torso. **Preserve Source Proportions** instead adds a `CV_` deformation
 skeleton with uniformly scaled source lengths, driven by the hero's rotations.
 It preserves the hero's animation graph; it does not rewrite animation clips or
-change gameplay collision bounds. Hand/weapon and foot contacts still need testing.
+change gameplay hitboxes. 
 
 | Original fit: compressed torso | Corrected source-proportion fit |
 |---|---|
 | ![Miruko before the correction](docs/images/proportions_miruko_before.png) | ![Miruko with source proportions retained](docs/images/proportions_miruko_rest.png) |
 
 Enabling the option on an already crushed mesh cannot restore the source geometry.
-Reopen the clean checkpoint. The older **Preserve Torso Proportions** option is a
-different experiment and is not the mode used here.
+Reopen the clean checkpoint. This is why it's recommended to save often and different versions.
 
 See the [Miruko correction guide](docs/miruko-abrams-proportions.md) for the running-pose
 preview, measured segment lengths and constraint details.
@@ -250,23 +229,10 @@ VPKs, including Sunset Shimmer for Celeste, were unchanged.
 
 ## Check the result in Deadlock
 
-Inspect front, side and rear views in the hideout first. Check body shape, clothing
-coverage, transparent layers, tail direction and weapon attachment. Then test walking,
-running, crouching, jumping, melee, firing, abilities and animation transitions.
-Watch for clipping, foot sliding, grip offsets and unstable secondary motion.
-
-| Miruko on Abrams | Trixie on Sinclair, corrected tail |
+| Miruko on Abrams | Trixie on Sinclair |
 |---|---|
 | ![Corrected Miruko in Deadlock](docs/images/proportions_miruko_runtime.png) | ![Trixie outfit and tail in Deadlock](docs/images/cheerleader_runtime_side.png) |
 
-The two builds were inspected in the hideout. Miruko's measured segment lengths were
-preserved, and the Trixie build retained the original body sliders while exporting
-13 meshes, 20 materials and 15 jiggle bones. The final Trixie rest-pose vertex check
-found no garment vertices more than 0.1 mm inside the body in source scale.
-
-These checks do not certify every triangle or animated frame. Full combat-animation
-and individual physics-region testing remain pending. The Trixie compile completed
-with a single-LOD warning and no compile failures.
 
 ## Troubleshooting
 
@@ -301,8 +267,3 @@ To run the ModelDoc constraint regression checks:
 ```powershell
 python -m unittest discover -s tests -p test_modeldoc.py
 ```
-
-Only LOD 0 is included in these builds. Material and jiggle settings are starting
-points for model-specific testing. Source Tools' export Undo behavior also needs
-special handling in remote/headless scripts; use the provided automation paths
-rather than assuming an interactive export behaves identically in a background job.
