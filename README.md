@@ -183,7 +183,7 @@ For floating guns, keep the body proportions and correct the visual weapon's
 attachment. Follow the [Miruko/Abrams weapon correction steps](docs/weapon-grip.md).
 This DMX/ModelDoc workflow is not yet automated
 
-### Why this avoids the compressed Miruko torso
+### Why this avoids the compressed torso
 
 The original fit moves source joints onto the hero's joints, which can shorten a
 character's torso. **Preserve Source Proportions** instead adds a `CV_` deformation
