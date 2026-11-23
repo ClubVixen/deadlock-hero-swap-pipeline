@@ -1,4 +1,4 @@
-"""Run with Blender --background --python tests/test_heels_blender.py."""
+"""Run with Blender --background --python tests/heels_blender.py."""
 import sys
 from pathlib import Path
 import bpy

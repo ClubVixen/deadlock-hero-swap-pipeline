@@ -11,3 +11,12 @@ config/*.json
 *.mdl
 work/
 __pycache__/
+
+# local working sessions and generated build output
+outputs/
+*.vpk
+*.kv3
+
+# local copy of the separate Game-Model-To-FBX repository
+GameModelsToFBX/
+GameModelsToFBX-v4.0.0-Windows.zip
