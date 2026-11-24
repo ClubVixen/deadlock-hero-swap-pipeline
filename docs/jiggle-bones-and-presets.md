@@ -15,14 +15,14 @@ is wrong for your rig.
 **The bundled `jiggle_presets.json` is the default, and ReVamped is optional.**
 
 - [Bundled default](../addon/hero_swap_tools/jiggle_presets.json) — broad hair, tail, breast,
-  butt and ear patterns across several naming conventions. Start here.
+  butt, and ear patterns across several naming conventions. Start here.
 - [ReVamped override](../config/jiggle_revamped_single_springs.json) — for matching ReVamped
   rigs; deliberately picks one breast/butt spring per side so motion doesn't stack. Not
   required for other models.
 - A custom JSON — when bone names differ, or for skirt chains. The bundled keep list does
   *not* explicitly select skirts, so add patterns for the chains that are actually weighted.
 
-One thing people get wrong: an external JSON **replaces** the default, it does not merge
+One thing people get wrong: an external JSON **replaces** the default; it does not merge
 with it. Older scenes also remember whichever path they were saved with, so check the
 **Presets** field again after moving a project between machines.
 
@@ -31,9 +31,9 @@ Each JSON holds `keep_patterns` plus physics `presets`. Matching is case-insensi
 without giving it its own spring (`TailBase` is the usual example).
 
 **Keep Jiggle Bones** retains eligible bones during a normal fit. In experimental
-proportion mode, deformation-relevant bones are retained on their own and the preset still
+proportion mode, deformation-relevant bones are retained on their own, and the preset still
 chooses which of them export as jiggle. Neither mode invents missing chains or paints
-weights — if the bones aren't there, refit from clean source with the right keep patterns.
+weights — if the bones aren't there, refit from a clean source with the right keep patterns.
 
 ## 1. Find the bones that actually move the mesh
 
@@ -42,7 +42,7 @@ group in Edit Mode (or use Weight Paint) to see which vertices it owns, and read
 armature hierarchy too. A bone called `Cape` might belong to an unused outfit — a name is
 not evidence.
 
-In this example the cape panels and bottom fur are driven by `L/M/R_Skirt_301` chains. The
+In this example, the cape panels and bottom fur are driven by `L/M/R_Skirt_301` chains. The
 source *also* has Cape and Cloak bones with no weights on this mesh at all. The scalp hair
 hangs off `Hair_301_root`, which is an attachment, not a swinging segment.
 
@@ -143,19 +143,7 @@ drifts away from its attachment, that's root physics or weights — check those 
 reaching for stiffness. If an anchored chain swings too much, cut travel and add damping in
 small steps. None of these bones guarantee cloth/body collision.
 
-## What this example produced
-
-The export contains 34 active springs: 19 hair, 13 cape, plus two existing breast springs,
-with the scalp/ponytail and cape attachment segments excluded. A Blender head-rotation check
-held the hair-root transform relative to the replacement head to about 0.000013
-matrix-element error.
-
-The VPK compiled with zero failures, was imported through Deadlock Mod Manager, and loaded in
-Deadlock — in the observed hideout idle views the scalp and ponytail stayed attached and the
-cape hung from its attachment.
-
-Running, abrupt stops and combat are **not** validated, and these are not a full animation or
-collision acceptance test.
+## In the game
 
 ![Rebuilt model in the game hideout](images/jiggle_runtime_idle.png)
 
