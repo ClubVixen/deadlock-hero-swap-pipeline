@@ -1,4 +1,4 @@
-# Deadlock Hero Swap — the illustrated Blender guide
+# Deadlock Hero Swap — A Simple Guide For Quick N Dirty Deadlock Mods
 
 Want Deadlock's heroes wearing someone else entirely? This guide walks you through the
 whole thing from Blender: drop a character and her outfit onto a hero rig, keep the
