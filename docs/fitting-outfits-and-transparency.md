@@ -87,7 +87,7 @@ opacity texture for Deadlock's `pbr.vfx`; in this constant-alpha workflow that t
 the slider value. An RGBA colour texture on its own does not feed that shader input, and
 arbitrary procedural Alpha node networks are not baked.
 
-## 4. Fit to the hero and fix the tail
+## 4. Fit to the hero and fix the tail (Ignore Trixie's tail still being upside down)
 
 1. Pick the hero in **1 / Hero** and **Import Hero Skeleton** — **Sinclair (magician)** here.
    In **4 / Bone Map**, auto-detect, inspect the result, save it.
@@ -145,38 +145,10 @@ textures and DMX, and the builder merges the orientation drivers into the hero's
 constraint list. A clean compile tells you the files are valid — nothing about animation or
 transparency in-game.
 
-## What was validated
-
-The example exported 13 meshes, 20 materials and 15 jiggle bones with the saved body shape
-values unchanged, and the final rest-pose test found no garment vertex more than 0.1 mm
-inside the body once hero scale was normalised.
-
-The compiled package was loaded on Sinclair in the Deadlock hideout. Front and side
-inspection confirmed visible transparency in the outer top and skirt, the retained opaque
-bra, the wand, and the tail sitting behind the character across several idle poses.
 
 ![Compiled transparency in Deadlock, front](images/cheerleader_runtime_front.png)
 ![Compiled outfit and corrected tail, side](images/cheerleader_runtime_side.png)
 
-Individual physics regions and full combat animations were not exhaustively tested — this is
-a transparency demonstration, not an animation certification. Only the existing
-Trixie/Sinclair package was replaced, and hash comparison confirmed every other installed VPK
-(including Sunset Shimmer for Celeste) was untouched. The model compiler reported a
-single-LOD warning and completed without compile failures.
-
-Local working files live under `outputs/trixie_cheerleader/` and are not committed:
-
-| File | Purpose |
-|---|---|
-| `01_user_imported_original.blend` | Untouched imported scene |
-| `08_prefit_editable.blend` | Fitted clothing, original proportions, editable shape controls |
-| `10_sinclair_fitted.blend` | Editable hero fit, tail correction and jiggle setup |
-| `Trixie_Cheerleader_Sinclair_export.blend` | Baked export copy |
-| `Trixie_Cheerleader_Sinclair.vpk` | Compiled game package |
-| `previous_Trixie_bunny_restore.vpk` | Previously installed package, for rollback |
-
-Third-party models and generated VPKs stay local; the workflow, screenshots, preset, code
-and measurements are what's shared here.
 
 Related: [jiggle bones and presets](jiggle-bones-and-presets.md) ·
 [proportions, heel shoes and weapon grip](proportions-heel-shoes-and-weapon-grip.md) ·
