@@ -2,7 +2,7 @@
 
 Want Deadlock's heroes wearing someone else entirely? This guide walks you through the
 whole thing from Blender: drop a character and her outfit onto a hero rig, keep the
-character's actual proportions instead of a squashed torso, get the secondary motion
+character's actual proportions instead of a squashed and stretched character, get the secondary motion
 still moving the way it should, and compile a working local mod — all from the
 **Hero Swap** sidebar.
 
@@ -13,8 +13,7 @@ friends — haven't been tested yet, so expect to do some hand-fitting there.
 
 ![Trixie on Sinclair: compiled outfit and transparency in Deadlock](docs/images/cheerleader_runtime_front.png)
 
-*Not a render — this is an actual in-game capture. The outer top and skirt sit at 45%
-opacity, and the bra underneath stays solid.*
+*Not a render — this is an actual in-game capture. 
 
 ![Several swapped heroes together in a Deadlock match](docs/images/runtime_lineup.jpg)
 
@@ -152,7 +151,7 @@ In **3 / Outfit**, set **New Body** to the skin mesh. **Rig** wants an armature;
 
 This route is mostly for the ReVamped Ponies, or any model that shares a body. It also
 works on Fo4 mods, since Fo4 reuses one body across multiple models — ponies included,
-in the CaN mod.
+in the CaN mod. Krystal was a poor example, but I can't be asked to show a better example.
 
 **Conform Clothing to Current Shape** works from the evaluated surfaces: it pushes
 intersecting clothing outward and carries the correction across all its shape keys, without
