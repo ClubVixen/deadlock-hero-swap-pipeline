@@ -79,35 +79,18 @@ Corrected rest pose:
 
 ![Miruko beside the Abrams reference with the fit controls open](images/a5_fit_front.png)
 
-### What this build actually measured
 
-- 205 deformation bones and 53 orientation drivers added. The runtime model kept the
-  hero's 8 existing constraints — **61 constraints in one list.**
-- All 16 measured mapped segment lengths survived uniform scaling, with a maximum relative
-  error of about 0.00007%.
-- The first runtime look exposed 16 unweighted vertices (2 body, 14 tail) producing
-  stretched triangles. The fitter now repairs isolated unweighted vertices from the nearest
-  weighted neighbour and reports each repair; wholly unweighted parts fall back to pelvis
-  attachment. Read those reports — nearest-neighbour weights are a repair, not intentional
-  skinning.
 
 ![Blender running-animation preview at frame 6](images/proportions_miruko_motion.png)
 
-*That is a Blender preview. It is not proof of gameplay locomotion.*
+
 
 Corrected hideout views:
 
 ![Miruko in the Deadlock hideout, front](images/proportions_miruko_runtime.png)
-![Miruko in the Deadlock hideout, side](images/proportions_miruko_runtime_side.png)
 
-Hair motion was observed in the hideout. The legacy `hero_testing` map crashed; the current
-`dl_midtown` map loaded on a local server through team selection, and testing ended before
-real gameplay. A map crash does not prove the replacement model caused it.
 
-Before calling this release-ready, walk, run, crouch, jump, melee, fire, use every Abrams
-ability and every transition between them, checking feet, weapon grip, shoulder deformation
-and secondary motion each time. A length measurement and a nice hideout pose cannot cover
-that.
+
 
 ---
 
@@ -149,11 +132,6 @@ they are and correct the *visual* weapon instead.
 
 ![Miruko corrected idle grip in the live hideout](images/miruko_weapon_grip.png)
 
-*That screenshot proves the idle grip only — see "what's verified" below.*
-
-There is still no one-click weapon-grip operator in the sidebar. This is manual DMX and
-ModelDoc constraint editing, so work on a separate addon/build configuration and keep the
-old VPK for rollback.
 
 1. Extract the original hero model and weapon DMX with Source 2 Viewer. Identify the weapon
    mesh, its weighted bones, and the original hand bone; then find the matching `CV_` hand
@@ -188,39 +166,8 @@ old VPK for rollback.
    effect location and both hands. A two-handed gun may also need support-hand IK or
    animation work — moving the gun cannot fix both contacts when arm lengths differ.
 
-### What's actually verified here
 
-The Abrams package compiled with zero failures, the compiled DATA kept the signed
-constraint weights, the installed VPK hash matched the exported package, the body DMX was
-reused without editing, and weapon scale stayed at 1.0. Live hideout and sandbox idle both
-showed the improved right-hand contact.
 
-**Firing, recoil and reload contact are unverified** — automated gameplay inputs didn't
-register during that test. The editable Blender file from the experiment previews the
-corrected rest grip; the exported ModelDoc constraints are what govern dynamic translation.
-
-This visual fix changes neither gameplay ballistics nor collision bounds. If the grip
-*rotation* or finger wrapping still looks wrong, diagnose that separately before resizing
-the weapon — and please don't publish someone else's hero as "validated" just because this
-Abrams package compiled.
-
----
-
-## Local checkpoints from these runs
-
-Working session files live under `outputs/miruko_abrams/` and are not committed:
-
-| File | Purpose |
-|---|---|
-| `Miruko_clean_prefit.blend` | Clean source checkpoint for refitting |
-| `Miruko_Abrams_driver_test.blend` | Corrected fitted/export model |
-| `Miruko_Abrams_animation_preview.blend` | Saved Blender animation preview |
-| `Miruko_Abrams_driver_test.vpk` | Package used for the corrected hideout inspection |
-| `driver_report.json` | Bone mapping, scale, driver and weight-repair report |
-| `proportion_constraints.kv3` | Runtime orientation drivers |
-
-The guide, screenshots and code are shared on GitHub; third-party model files and generated
-VPKs stay local.
 
 Related: [fitting outfits and transparency](fitting-outfits-and-transparency.md) ·
 [jiggle bones and presets](jiggle-bones-and-presets.md) ·
