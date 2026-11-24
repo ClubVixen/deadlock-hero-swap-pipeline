@@ -149,8 +149,7 @@ transparency in-game.
 
 The example exported 13 meshes, 20 materials and 15 jiggle bones with the saved body shape
 values unchanged, and the final rest-pose test found no garment vertex more than 0.1 mm
-inside the body once hero scale was normalised. Detailed measurements:
-[validation/cheerleader_trixie_sinclair.json](../validation/cheerleader_trixie_sinclair.json).
+inside the body once hero scale was normalised.
 
 The compiled package was loaded on Sinclair in the Deadlock hideout. Front and side
 inspection confirmed visible transparency in the outer top and skirt, the retained opaque

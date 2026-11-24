@@ -377,13 +377,10 @@ cannot certify its own screenshots.
 | Path | What it is |
 |---|---|
 | `addon/hero_swap_tools/` | The Blender add-on — install this one |
-| `config/` | Bone-map and jiggle presets, plus example build configs |
+| `config/` | Jiggle presets and an example build config |
 | `docs/` | The three deep guides |
 | `AGENTS.md` | Runbook written for AI agents |
 | `tools/` | `build_mod.py` and `pack_vpk.py`, used by the add-on's build step |
-| `tests/` | Small offline regression checks (no Blender needed) |
-| `validation/` | Measurement records from the two documented builds — evidence, not instructions |
-| `legacy/batch-scripts/` | Older headless three-script flow, kept for reference |
 
 Rebuilding an exported configuration locally:
 
@@ -391,19 +388,9 @@ Rebuilding an exported configuration locally:
 python tools/build_mod.py <path-to-build_config.json>
 ```
 
-Regression checks from the repository root (5 tests, plain Python, no Blender):
-
-```powershell
-python -m unittest discover -s tests -p "test_*.py"
-```
-
 ## Going deeper
 
 - [Fitting an outfit and testing transparency](docs/fitting-outfits-and-transparency.md)
 - [Jiggle bones, presets and tuning](docs/jiggle-bones-and-presets.md)
 - [Proportions, heel shoes and weapon grip](docs/proportions-heel-shoes-and-weapon-grip.md)
-- Measurements: [Trixie/Sinclair](validation/cheerleader_trixie_sinclair.json) ·
-  [Miruko/Abrams](validation/miruko_abrams_proportions.json)
 - [Example build configuration](config/example_build_config.json)
-- [Older batch-flow configuration](config/example_hero_swap.json), for the scripts in
-  `legacy/batch-scripts/`

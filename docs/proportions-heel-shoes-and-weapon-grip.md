@@ -70,8 +70,8 @@ Corrected rest pose:
    next to the model, and the builder picks it up through `build_config.json`.
 9. Build the VPK. **The constraints must merge into the hero's existing single
    `AnimConstraintList`.** In our test, adding a second separate list compiled fine and
-   still left the replacement frozen in its rest pose in-game. The bundled regression test
-   checks that original and added constraints share one list.
+   still left the replacement frozen in its rest pose in-game. The builder merges them into
+   the existing list for you.
 10. Import the VPK with Deadlock Mod Manager's **Add Local Mod** in your existing profile.
     Replace only an older conflicting Miruko/Abrams entry, leave unrelated mods (Sunset
     Shimmer for Celeste included) enabled, restart Deadlock, and look at the character that
@@ -84,8 +84,7 @@ Corrected rest pose:
 - 205 deformation bones and 53 orientation drivers added. The runtime model kept the
   hero's 8 existing constraints — **61 constraints in one list.**
 - All 16 measured mapped segment lengths survived uniform scaling, with a maximum relative
-  error of about 0.00007%. Per-segment numbers are in
-  [the Miruko measurement record](../validation/miruko_abrams_proportions.json).
+  error of about 0.00007%.
 - The first runtime look exposed 16 unweighted vertices (2 body, 14 tail) producing
   stretched triangles. The fitter now repairs isolated unweighted vertices from the nearest
   weighted neighbour and reports each repair; wholly unweighted parts fall back to pelvis
@@ -222,12 +221,6 @@ Working session files live under `outputs/miruko_abrams/` and are not committed:
 
 The guide, screenshots and code are shared on GitHub; third-party model files and generated
 VPKs stay local.
-
-Run the build regression checks from the repository root:
-
-```powershell
-python -m unittest discover -s tests -p test_modeldoc.py
-```
 
 Related: [fitting outfits and transparency](fitting-outfits-and-transparency.md) ·
 [jiggle bones and presets](jiggle-bones-and-presets.md) ·

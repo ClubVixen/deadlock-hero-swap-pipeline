@@ -20,3 +20,9 @@ outputs/
 # local copy of the separate Game-Model-To-FBX repository
 GameModelsToFBX/
 GameModelsToFBX-v4.0.0-Windows.zip
+
+# Local-only: dev tests, build measurements, old batch scripts
+tests/
+validation/
+legacy/
+config/example_hero_swap.json

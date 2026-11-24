@@ -150,9 +150,7 @@ with the scalp/ponytail and cape attachment segments excluded. A Blender head-ro
 held the hair-root transform relative to the replacement head to about 0.000013
 matrix-element error.
 
-Selection refresh, exclusion, prefix matching, skip precedence and multiplier export are all
-covered by the unit tests (`python -m unittest discover -s tests -p test_jiggle.py`). The
-VPK compiled with zero failures, was imported through Deadlock Mod Manager, and loaded in
+The VPK compiled with zero failures, was imported through Deadlock Mod Manager, and loaded in
 Deadlock — in the observed hideout idle views the scalp and ponytail stayed attached and the
 cape hung from its attachment.
 

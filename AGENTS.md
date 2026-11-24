@@ -18,7 +18,7 @@ character's proportions, outfit, secondary motion and transparency where asked.
    error is correct behaviour — get a clean skeleton, don't try to work around it.
 3. **Proportion constraints must merge into the hero's existing single
    `AnimConstraintList`.** A second separate list compiles fine and the character still
-   freezes in rest pose in-game. `tests/test_modeldoc.py` guards this.
+   freezes in rest pose in-game.
 4. **Don't touch unrelated mods.** When installing, replace only the conflicting package for
    the same hero, and compare hashes of the other installed VPKs before and after.
 5. **Report measured numbers, not vibes.** The add-on prints reports (rotation, scale, kept
@@ -54,13 +54,9 @@ setup section.
 addon/hero_swap_tools/   the add-on: core.py fit logic, proportions.py CV_ rig +
                          constraints, jiggle.py selection/rules, kv3.py, build.py,
                          __init__.py UI + operators, bundled presets
-config/                  jiggle presets and example build/swap configs
+config/                  jiggle presets and an example build config
 docs/                    three deep guides (read the one matching the symptom)
 tools/                   build_mod.py (rebuild from build_config.json), pack_vpk.py
-tests/                   offline unit tests + Blender-side checks (see Running checks)
-validation/              measurement records for the two documented builds — evidence only,
-                         not instructions, and not a promise for other characters
-legacy/batch-scripts/    older headless 3-script flow; do not modernise unless asked
 ```
 
 ## Canonical run order
@@ -117,30 +113,13 @@ Read the matching one before touching its subsystem.
 - Sinclair is `magician`, and other display names differ from model names. The hero list is
   read from the installed game.
 
-## Running checks
-
-Offline (no Blender, 5 tests):
-
-```powershell
-python -m unittest discover -s tests -p "test_*.py"
-```
-
-Blender-side (needs a Blender binary on PATH or full path):
-
-```powershell
-blender -b --factory-startup --python tests/blender_regions.py
-blender -b --factory-startup --python tests/blender_shape_opacity.py
-blender -b --factory-startup --python tests/heels_blender.py
-```
+## Rebuilding
 
 Rebuild from a previously exported configuration:
 
 ```powershell
 python tools/build_mod.py "<...>\build_config.json"
 ```
-
-A green test run means the constraint/mesh assembly logic behaved. It says nothing about how
-the character looks in-game.
 
 ## Definition of done
 
