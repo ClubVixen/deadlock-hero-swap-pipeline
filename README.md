@@ -359,7 +359,7 @@ alone; hashes confirmed every other installed VPK was untouched in this test.
 
 You don't have to be the one clicking through Blender. [`AGENTS.md`](AGENTS.md) is written
 for a model driving the pipeline — a ChatGPT agent on your computer, Codex, Claude, or
-tools like Cowork/Manus/Devin — with the repo map, the exact run order, operator names, what
+tools like Cowork — with the repo map, the exact run order, operator names, what
 to check after each step, and what genuinely counts as verified.
 
 The short version to paste at it:
